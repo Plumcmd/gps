@@ -17,6 +17,8 @@ import {
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 
+import { Sun, Moon } from 'lucide-react'
+
 import { supabase } from '@/lib/supabase'
 import { Navigation } from 'lucide-react'
 import { Device } from "@/types/device"
@@ -49,6 +51,7 @@ const TrackerMap = forwardRef<TrackerMapRef>((props, ref) => {
   const [addresses, setAddresses] = useState<Record<string, string>>({})
   const [selected, setSelected] = useState<Device | null>(null)
 
+
   const mapRef = useRef<L.Map | null>(null)
   const markersRef = useRef<Record<string, L.Marker>>({})
 
@@ -59,6 +62,13 @@ const TrackerMap = forwardRef<TrackerMapRef>((props, ref) => {
     ) || []
     setDevices(valid)
   }
+
+  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
+  if (typeof window !== 'undefined') {
+    return (localStorage.getItem('theme') as 'dark' | 'light') || 'light'
+  }
+  return 'light'
+})
 
   useEffect(() => {
     loadDevices()
@@ -95,6 +105,10 @@ const TrackerMap = forwardRef<TrackerMapRef>((props, ref) => {
 
     return () => { void supabase.removeChannel(channel) }
   }, [])
+
+  useEffect(() => {
+  localStorage.setItem('theme', theme)
+}, [theme])
 
   // ====================== ПОЛУЧЕНИЕ АДРЕСА ЧЕРЕЗ API ======================
   const getAddress = async (lat: number, lng: number): Promise<string> => {
@@ -176,6 +190,23 @@ const TrackerMap = forwardRef<TrackerMapRef>((props, ref) => {
   return (
     <div className="h-screen w-full relative">
 
+{/* iOS Toggle */}
+<div className="absolute top-123 right-4 z-[1000]">
+  <button
+    onClick={() => setTheme(prev => prev === 'dark' ? 'light' : 'dark')}
+    className={`ios-switch ${theme === 'light' ? 'active' : ''}`}
+  >
+    {/* 🌙 */}
+    <Moon className="icon moon" size={14} />
+
+    {/* ☀️ */}
+    <Sun className="icon sun" size={14} />
+
+    {/* бегунок */}
+    <span className="thumb" />
+  </button>
+</div>
+
 <div className="absolute left-4 top-1/2 -translate-y-1/2 z-[1000] pointer-events-none">
   <div className="gps-text">
     GPS Polska Flora
@@ -241,6 +272,7 @@ const TrackerMap = forwardRef<TrackerMapRef>((props, ref) => {
                     >
                       Закрыть
                     </Button>
+
                   </div>
                 </>
               )
@@ -257,7 +289,14 @@ const TrackerMap = forwardRef<TrackerMapRef>((props, ref) => {
         zoomControl={false}
         attributionControl={false}
       >
-        <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" />
+        
+<TileLayer
+  url={
+    theme === 'dark'
+      ? "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+      : "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
+  }
+/>
 
         {devices.map(device => {
           const lat = Number(device.lat)

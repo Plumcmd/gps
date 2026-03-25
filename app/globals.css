@@ -359,3 +359,83 @@ body > div:last-child:not(.leaflet-container) > div:last-child {
     display: none;
   }
 }
+
+/* контейнер */
+.ios-switch {
+  width: 58px;
+  height: 30px;
+  border-radius: 999px;
+  background: #2a2a2a;
+  position: relative;
+  transition: all 0.3s ease;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 6px;
+}
+
+/* активное состояние */
+.ios-switch.active {
+  background: #22c55e;
+}
+
+/* иконки */
+.ios-switch .icon {
+  z-index: 1;
+  transition: all 0.3s ease;
+  opacity: 0.6;
+}
+
+/* 🌙 слева */
+.ios-switch .moon {
+  color: #cbd5f5;
+}
+
+/* ☀️ справа */
+.ios-switch .sun {
+  color: #facc15;
+}
+
+/* при включении (light) */
+.ios-switch.active .sun {
+  opacity: 1;
+  transform: scale(1.1);
+}
+
+.ios-switch.active .moon {
+  opacity: 0.3;
+}
+
+/* при dark */
+.ios-switch:not(.active) .moon {
+  opacity: 1;
+  transform: scale(1.1);
+}
+
+.ios-switch:not(.active) .sun {
+  opacity: 0.3;
+}
+
+/* бегунок */
+.ios-switch .thumb {
+  width: 24px;
+  height: 24px;
+  background: white;
+  border-radius: 50%;
+  position: absolute;
+  top: 3px;
+  left: 3px;
+
+  transition: all 0.3s cubic-bezier(.4,0,.2,1);
+  z-index: 2;
+}
+
+.ios-switch.active .thumb {
+  transform: translateX(28px);
+}
+
+/* hover */
+.ios-switch:hover {
+  transform: scale(1.05);
+}
