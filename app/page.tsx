@@ -35,7 +35,6 @@ export default function Home() {
 
   const mapRef = useRef<any>(null)
 
-  // Получение адреса
   const getAddress = async (lat: number, lng: number): Promise<string> => {
     try {
       const res = await fetch(
@@ -129,12 +128,11 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-black text-white overflow-hidden relative pb-safe">
-      {/* КАРТА НА ВЕСЬ ЭКРАН */}
       <div className="absolute inset-0">
         <TrackerMap ref={mapRef} />
       </div>
 
-      {/* ТОП БАР — компактный для телефона */}
+      {/* ТОП БАР */}
       <div className="absolute top-0 left-0 right-0 z-50 bg-black/70 backdrop-blur-2xl border-b border-white/10 px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 bg-green-500 rounded-2xl flex items-center justify-center">
@@ -144,7 +142,7 @@ export default function Home() {
         </div>
       </div>
 
-      {/* ПЛАВАЮЩИЕ КНОПКИ — не вылазят */}
+      {/* ПЛАВАЮЩИЕ КНОПКИ */}
       <div className="absolute bottom-6 left-4 z-[1000]">
         <Button
           onClick={() => setShowAdd(true)}
@@ -154,12 +152,9 @@ export default function Home() {
         </Button>
       </div>
 
-      <div className="absolute bottom-25 right-5 z-[1000] flex flex-col gap-3">
+      <div className="absolute bottom-24 right-5 z-[1000] flex flex-col gap-3">
         <Button
-          onClick={async () => {
-            await updateAllDevices()
-            toast.success('Обновлено')
-          }}
+          onClick={async () => { await updateAllDevices(); toast.success('Обновлено') }}
           className="w-12 h-12 bg-zinc-900/90 hover:bg-zinc-800 border border-white/20 rounded-3xl flex items-center justify-center"
         >
           <RefreshCw className="w-7 h-7" />
@@ -173,7 +168,7 @@ export default function Home() {
         </Button>
       </div>
 
-      {/* ДИАЛОГ ДОБАВЛЕНИЯ — строго по центру */}
+      {/* ДИАЛОГ ДОБАВЛЕНИЯ */}
       <Dialog open={showAdd} onOpenChange={setShowAdd}>
         <DialogContent className="bg-zinc-900 border-white/10 text-white mx-auto max-w-[92vw] md:max-w-md rounded-3xl max-h-[90vh] overflow-hidden">
           <DialogHeader>
@@ -199,7 +194,7 @@ export default function Home() {
         </DialogContent>
       </Dialog>
 
-      {/* СПИСОК УСТРОЙСТВ — по центру */}
+      {/* СПИСОК УСТРОЙСТВ */}
       <Dialog open={showList} onOpenChange={setShowList}>
         <DialogContent className="bg-zinc-900 border-white/10 text-white mx-auto max-w-[92vw] md:max-w-lg rounded-3xl max-h-[90vh] flex flex-col">
           <DialogHeader>
@@ -213,8 +208,24 @@ export default function Home() {
               const hasPos = !isNaN(lat) && !isNaN(lng)
               const address = addresses[device.imei] || 'Определяем адрес...'
 
-              const minutesAgo = device.last_updated ? (Date.now() - new Date(device.last_updated).getTime()) / 1000 / 60 : 999
-              const isOnline = minutesAgo < 7
+              const minutesAgo = device.last_updated 
+                ? (Date.now() - new Date(device.last_updated).getTime()) / 1000 / 60 
+                : 9999
+
+              let statusText = 'Оффлайн'
+              let statusColor = 'bg-red-500/20 text-red-400'
+              let isOnline = false
+
+              if (minutesAgo < 10) {
+                statusText = 'Онлайн'
+                statusColor = 'bg-green-500/20 text-green-400'
+                isOnline = true
+              } else if (minutesAgo < 60) {
+                statusText = `Был ${Math.floor(minutesAgo)} мин назад`
+                statusColor = 'bg-yellow-500/20 text-yellow-400'
+              }
+
+              const isTrackerOnline = minutesAgo < 15
 
               return (
                 <div
@@ -228,20 +239,37 @@ export default function Home() {
                       <p className="text-zinc-400 text-sm mt-0.5">{device.imei}</p>
                       {hasPos && <p className="text-zinc-500 text-xs mt-3 line-clamp-2">{address}</p>}
                     </div>
-                    <div className={`text-xs px-4 h-7 rounded-3xl flex items-center font-medium ${isOnline ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
-                      {isOnline ? 'Онлайн' : 'Оффлайн'}
+
+                    <div className={`text-xs px-4 h-7 rounded-3xl flex items-center font-medium ${statusColor}`}>
+                      {statusText}
                     </div>
                   </div>
 
+                  {/* Информация о трекере */}
+                  <div className="mt-4 flex flex-wrap gap-2 text-xs">
+                    <div className={`px-3 py-1 rounded-2xl flex items-center gap-1.5 ${isTrackerOnline ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>
+                      {isTrackerOnline ? '📡 Трекер в сети' : '📴 Трекер не в сети'}
+                    </div>
+
+                    {device.speed !== null && device.speed !== undefined && Number(device.speed) > 0 && (
+                      <div className="px-3 py-1 rounded-2xl bg-zinc-800 text-zinc-400">
+                        🚗 {device.speed} км/ч
+                      </div>
+                    )}
+                  </div>
+
                   <div className="flex gap-2 mt-5">
-                    <Button size="sm" variant="outline" className="flex-1 border-white/20 text-white hover:bg-white/10" onClick={e => { e.stopPropagation(); setEditingDevice(device); setNewName(device.name || '') }}>
+                    <Button size="sm" variant="outline" className="flex-1 border-white/20 text-white hover:bg-white/10" 
+                      onClick={e => { e.stopPropagation(); setEditingDevice(device); setNewName(device.name || '') }}>
                       <Pencil className="w-4 h-4 mr-2" /> 
                     </Button>
-                    <Button size="sm" variant="outline" className="flex-1 border-red-500/30 text-red-400 hover:bg-red-500/10" onClick={e => { e.stopPropagation(); deleteDevice(device.imei) }}>
+                    <Button size="sm" variant="outline" className="flex-1 border-red-500/30 text-red-400 hover:bg-red-500/10" 
+                      onClick={e => { e.stopPropagation(); deleteDevice(device.imei) }}>
                       <Trash2 className="w-4 h-4 mr-2" /> 
                     </Button>
                     {hasPos && (
-                      <Button size="sm" variant="outline" className="flex-1 border-green-500/30 text-green-400 hover:bg-green-500/10" onClick={async (e) => { e.stopPropagation(); await loadHistory(device.imei); setShowList(false) }}>
+                      <Button size="sm" variant="outline" className="flex-1 border-green-500/30 text-green-400 hover:bg-green-500/10" 
+                        onClick={async (e) => { e.stopPropagation(); await loadHistory(device.imei); setShowList(false) }}>
                         <Route className="w-4 h-4 mr-2" /> 
                       </Button>
                     )}

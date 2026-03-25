@@ -64,11 +64,15 @@ export async function fetchDevicePosition(imei: string) {
 
     if (!car?.lat || !car?.lon) return
 
+    // Сохраняем время с трекера (gpstime, time и т.д.)
+    const gpsTime = car.gpstime || car.time || car.updatetime || car.lasttime || null
+
     await supabase.from('devices').update({
       lat: parseFloat(car.lat),
       lng: parseFloat(car.lon),
       speed: car.speed ? parseFloat(car.speed) : null,
       last_updated: new Date().toISOString(),
+      gps_time: gpsTime,                    // ← новое поле
     }).eq('imei', imei)
   } catch (err) {
     console.error(`[POSITION] ${imei}:`, err)
@@ -99,7 +103,6 @@ export async function fetchTodayHistory(imei: string) {
 
     if (json.ret !== 1) throw new Error(json.msg || 'Ошибка запроса истории')
 
-    // ✅ Исправлено: явно указываем тип параметра
     const points = (json.data || [])
       .map((p: any) => ({
         lat: parseFloat(p.lat || p.latitude || '0'),
