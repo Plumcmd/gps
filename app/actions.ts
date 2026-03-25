@@ -3,8 +3,6 @@
 import { supabase } from '@/lib/supabase'
 import { revalidatePath } from 'next/cache'
 
-type WhatsGPSResponse = { ret: number; data?: any; msg?: string }
-
 // ====================== ЛОГИН ======================
 async function loginWithDeviceCredentials(baseUrl: string, imei: string, password: string): Promise<string> {
   const url = `${baseUrl}/user/login.do?name=${encodeURIComponent(imei)}&password=${encodeURIComponent(password.trim())}`
@@ -44,13 +42,15 @@ export async function updateAllDevices() {
   if (!devices?.length) return
 
   for (const dev of devices) {
-    if (dev.password) await fetchDevicePosition(dev.imei).catch(() => {})
+    if (dev.password) {
+      await fetchDevicePosition(dev.imei).catch(() => {})
+    }
   }
   revalidatePath('/')
 }
 
-// ====================== ТЕКУЩАЯ ПОЗИЦИЯ ======================
-export async function fetchDevicePosition(imei: string) {
+// ====================== ТЕКУЩАЯ ПОЗИЦИЯ (внутренняя) ======================
+async function fetchDevicePosition(imei: string) {
   try {
     const { data: device } = await supabase.from('devices').select('password, base_url').eq('imei', imei).single()
     if (!device?.password) return
@@ -84,7 +84,6 @@ export async function fetchTodayHistory(imei: string) {
     const baseUrl = device.base_url || 'https://www.whatsgps.com'
     const token = await loginWithDeviceCredentials(baseUrl, imei, device.password)
 
-    // Последние 24 часа в UTC
     const now = new Date()
     const startTime = new Date(now.getTime() - 24 * 60 * 60 * 1000)
       .toISOString()
@@ -100,11 +99,15 @@ export async function fetchTodayHistory(imei: string) {
 
     if (json.ret !== 1) throw new Error(json.msg || 'Ошибка запроса истории')
 
-    // Формируем массив точек для Polyline
-    const points = (json.data || []).map((p: any) => ({
-      lat: parseFloat(p.lat || p.latitude),
-      lng: parseFloat(p.lng || p.longitude),
-    })).filter(p => !isNaN(p.lat) && !isNaN(p.lng))
+    // Исправлено: убрана ошибка TypeScript (Parameter 'p' implicitly has an 'any' type)
+    const points = (json.data || [])
+      .map((p: any) => ({
+        lat: parseFloat(p.lat || p.latitude || '0'),
+        lng: parseFloat(p.lng || p.longitude || '0'),
+      }))
+      .filter((p): p is { lat: number; lng: number } => 
+        !isNaN(p.lat) && !isNaN(p.lng)
+      )
 
     return points
   } catch (err: any) {
