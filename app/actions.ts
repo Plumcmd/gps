@@ -64,7 +64,7 @@ export async function fetchDevicePosition(imei: string) {
 
     if (!car?.lat || !car?.lon) return
 
-    // Сохраняем время с трекера (gpstime, time и т.д.)
+    // Сохраняем реальное время с трекера
     const gpsTime = car.gpstime || car.time || car.updatetime || car.lasttime || null
 
     await supabase.from('devices').update({
@@ -72,7 +72,7 @@ export async function fetchDevicePosition(imei: string) {
       lng: parseFloat(car.lon),
       speed: car.speed ? parseFloat(car.speed) : null,
       last_updated: new Date().toISOString(),
-      gps_time: gpsTime,                    // ← новое поле
+      gps_time: gpsTime,                    // важно для точного статуса
     }).eq('imei', imei)
   } catch (err) {
     console.error(`[POSITION] ${imei}:`, err)

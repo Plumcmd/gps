@@ -66,7 +66,7 @@ export default function Home() {
     const interval = setInterval(async () => {
       await updateAllDevices()
       await loadDevices()
-    }, 25000)
+    }, 10000)
 
     return () => clearInterval(interval)
   }, [])

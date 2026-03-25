@@ -18,7 +18,7 @@ import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 
 import { supabase } from '@/lib/supabase'
-import { Navigation, Route } from 'lucide-react'   // добавили Route
+import { Navigation } from 'lucide-react'
 import { Device } from "@/types/device"
 import {
   Dialog,
@@ -40,15 +40,14 @@ const defaultCenter: [number, number] = [53.42894, 14.55302]
 
 interface TrackerMapRef {
   flyTo: (pos: [number, number], zoom?: number) => void
-  updateMarker: (imei: string, lat: number, lng: number) => void
   drawRoute: (points: any[]) => void
 }
 
 const TrackerMap = forwardRef<TrackerMapRef>((props, ref) => {
-  const [devices, setDevices] = useState<any[]>([])
+  const [devices, setDevices] = useState<Device[]>([])
   const [route, setRoute] = useState<[number, number][]>([])
   const [addresses, setAddresses] = useState<Record<string, string>>({})
-  const [selected, setSelected] = useState<any | null>(null)
+  const [selected, setSelected] = useState<Device | null>(null)
 
   const mapRef = useRef<L.Map | null>(null)
   const markersRef = useRef<Record<string, L.Marker>>({})
@@ -62,7 +61,7 @@ const TrackerMap = forwardRef<TrackerMapRef>((props, ref) => {
     setDevices(valid)
   }
 
-  // Подписка на обновления в реальном времени
+  // Подписка на обновления
   useEffect(() => {
     loadDevices()
 
@@ -71,20 +70,20 @@ const TrackerMap = forwardRef<TrackerMapRef>((props, ref) => {
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'devices' },
-        payload => {
+        (payload) => {
           const d = payload.new as Device
           const lat = Number(d.lat)
           const lng = Number(d.lng)
           if (isNaN(lat) || isNaN(lng)) return
 
           setDevices(prev => {
-            const i = prev.findIndex(p => p.imei === d.imei)
-            if (i !== -1) {
+            const index = prev.findIndex(p => p.imei === d.imei)
+            if (index !== -1) {
               const copy = [...prev]
-              copy[i] = { ...d, isOnline: true }
+              copy[index] = d
               return copy
             }
-            return [{ ...d, isOnline: true }, ...prev]
+            return [d, ...prev]
           })
 
           if (markersRef.current[d.imei]) {
@@ -96,9 +95,7 @@ const TrackerMap = forwardRef<TrackerMapRef>((props, ref) => {
       )
       .subscribe()
 
-    return () => {
-      void supabase.removeChannel(channel)
-    }
+    return () => { void supabase.removeChannel(channel) }
   }, [])
 
   // Получение адреса
@@ -129,16 +126,33 @@ const TrackerMap = forwardRef<TrackerMapRef>((props, ref) => {
     })
   }, [devices])
 
-  // Методы для родителя (page.tsx)
+  // Умный статус (одинаковый везде)
+  const getDeviceStatus = (device: Device) => {
+    const minutesAgo = device.last_updated
+      ? (Date.now() - new Date(device.last_updated).getTime()) / 1000 / 60
+      : 9999
+
+    let statusText = 'Оффлайн'
+    let statusColor = 'bg-red-500/20 text-red-400'
+    let trackerOnline = false
+
+    if (minutesAgo < 10) {
+      statusText = 'Онлайн'
+      statusColor = 'bg-green-500/20 text-green-400'
+      trackerOnline = true
+    } else if (minutesAgo < 60) {
+      statusText = `Был ${Math.floor(minutesAgo)} мин назад`
+      statusColor = 'bg-yellow-500/20 text-yellow-400'
+      trackerOnline = true
+    }
+
+    return { statusText, statusColor, trackerOnline, minutesAgo }
+  }
+
+  // Методы для родителя
   useImperativeHandle(ref, () => ({
     flyTo: (pos, zoom = 15) => {
       mapRef.current?.flyTo(pos, zoom, { duration: 1.2 })
-    },
-
-    updateMarker: (imei, lat, lng) => {
-      if (markersRef.current[imei]) {
-        markersRef.current[imei].setLatLng([lat, lng])
-      }
     },
 
     drawRoute: (points) => {
@@ -155,23 +169,10 @@ const TrackerMap = forwardRef<TrackerMapRef>((props, ref) => {
     }
   }))
 
-  // Вычисление онлайн/оффлайн и скорости
-  const getStatus = (device: any) => {
-    if (!device.last_updated) return { isOnline: false, speedText: '0 км/ч' }
-
-    const minutesAgo = (Date.now() - new Date(device.last_updated).getTime()) / 1000 / 60
-    const isOnline = minutesAgo < 7
-
-    const speed = device.speed !== null && device.speed !== undefined ? Number(device.speed) : 0
-    const speedText = speed > 0 ? `${speed} км/ч` : '0 км/ч'
-
-    return { isOnline, speedText }
-  }
-
   return (
     <div className="h-screen w-full relative">
 
-      {/* МОДАЛЬНОЕ ОКНО — как в списке устройств */}
+      {/* МОДАЛЬНОЕ ОКНО */}
       <Dialog open={!!selected} onOpenChange={() => setSelected(null)}>
         <DialogContent className="bg-zinc-900 border-white/10 text-white max-w-[92vw] md:max-w-md rounded-3xl p-0 overflow-hidden">
           <DialogHeader className="px-6 pt-6 pb-4 border-b border-white/10">
@@ -179,68 +180,69 @@ const TrackerMap = forwardRef<TrackerMapRef>((props, ref) => {
           </DialogHeader>
 
           <div className="p-6 space-y-6">
-            {/* Название + IMEI + Статус */}
-            <div className="flex justify-between items-start">
-              <div className="flex-1">
-                <div className="text-2xl font-bold text-white">
-                  {selected?.name || 'Автомобиль'}
-                </div>
-                <div className="text-sm text-zinc-400 mt-1">
-                  {selected?.imei}
-                </div>
-              </div>
+            {selected && (() => {
+              const { statusText, statusColor, trackerOnline } = getDeviceStatus(selected)
+              const speed = selected.speed ? Number(selected.speed) : 0
 
-              {selected && (() => {
-                const { isOnline } = getStatus(selected)
-                return (
-                  <div className={`px-4 h-7 rounded-3xl flex items-center text-sm font-medium ${isOnline ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
-                    {isOnline ? 'Онлайн' : 'Оффлайн'}
+              return (
+                <>
+                  <div className="flex justify-between items-start">
+                    <div className="flex-1">
+                      <div className="text-2xl font-bold text-white">
+                        {selected.name || 'Автомобиль'}
+                      </div>
+                      <div className="text-sm text-zinc-400 mt-1">
+                        {selected.imei}
+                      </div>
+                    </div>
+                    <div className={`px-4 h-7 rounded-3xl flex items-center text-sm font-medium ${statusColor}`}>
+                      {statusText}
+                    </div>
                   </div>
-                )
-              })()}
-            </div>
 
-            {/* Адрес */}
-            <div>
-              <div className="text-xs text-zinc-400 mb-1">📍 Текущее местоположение</div>
-              <div className="text-base text-zinc-200 leading-tight">
-                {selected && addresses[selected.imei] || 'Определяем адрес...'}
-              </div>
-            </div>
+                  <div>
+                    <div className="text-xs text-zinc-400 mb-1">📍 Текущее местоположение</div>
+                    <div className="text-base text-zinc-200 leading-tight">
+                      {addresses[selected.imei] || 'Определяем адрес...'}
+                    </div>
+                  </div>
 
-            {/* Скорость */}
-            <div>
-              <div className="text-xs text-zinc-400 mb-1">🚗 Скорость</div>
-              <div className="text-4xl font-semibold text-white">
-                {selected ? getStatus(selected).speedText : '0 км/ч'}
-              </div>
-            </div>
+                  <div>
+                    <div className="text-xs text-zinc-400 mb-1">🚗 Скорость</div>
+                    <div className="text-4xl font-semibold text-white">
+                      {speed > 0 ? `${speed} км/ч` : '0 км/ч'}
+                    </div>
+                  </div>
 
-            {/* Маленькие кнопки — как в списке */}
-            <div className="flex gap-2 pt-4">
-              <Button
-                size="sm"
-                variant="outline"
-                className="flex-1 border-green-500/30 text-green-400 hover:bg-green-500/10"
-                onClick={() => {
-                  if (selected) {
-                    window.open(`https://www.google.com/maps/dir/?api=1&destination=${selected.lat},${selected.lng}`)
-                  }
-                }}
-              >
-                <Navigation className="w-4 h-4 mr-2" />
-                Маршрут
-              </Button>
+                  <div className={`px-4 py-2 rounded-2xl text-sm flex items-center gap-2 ${trackerOnline ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>
+                    {trackerOnline ? '📡 Трекер в сети' : '📴 Трекер не в сети'}
+                  </div>
 
-              <Button
-                size="sm"
-                variant="outline"
-                className="flex-1 border-white/20 text-white hover:bg-white/10"
-                onClick={() => setSelected(null)}
-              >
-                Закрыть
-              </Button>
-            </div>
+                  <div className="flex gap-2 pt-4">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="flex-1 border-green-500/30 text-green-400 hover:bg-green-500/10"
+                      onClick={() => {
+                        window.open(`https://www.google.com/maps/dir/?api=1&destination=${selected.lat},${selected.lng}`)
+                      }}
+                    >
+                      <Navigation className="w-4 h-4 mr-2" />
+                      Маршрут в Google
+                    </Button>
+
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="flex-1 border-white/20 text-white hover:bg-white/10"
+                      onClick={() => setSelected(null)}
+                    >
+                      Закрыть
+                    </Button>
+                  </div>
+                </>
+              )
+            })()}
           </div>
         </DialogContent>
       </Dialog>
