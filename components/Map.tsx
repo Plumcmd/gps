@@ -191,7 +191,7 @@ const TrackerMap = forwardRef<TrackerMapRef>((props, ref) => {
     <div className="h-screen w-full relative">
 
 {/* iOS Toggle */}
-<div className="absolute top-123 right-4 z-[1000]">
+<div className="absolute bottom-37 right-4 z-[1000]">
   <button
     onClick={() => setTheme(prev => prev === 'dark' ? 'light' : 'dark')}
     className={`ios-switch ${theme === 'light' ? 'active' : ''}`}
