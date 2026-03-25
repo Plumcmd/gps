@@ -96,37 +96,23 @@ const TrackerMap = forwardRef<TrackerMapRef>((props, ref) => {
     return () => { void supabase.removeChannel(channel) }
   }, [])
 
-  // ==================== УЛУЧШЕННАЯ ФУНКЦИЯ АДРЕСА ====================
+  // ====================== ПОЛУЧЕНИЕ АДРЕСА ЧЕРЕЗ API ======================
   const getAddress = async (lat: number, lng: number): Promise<string> => {
     const cacheKey = `${lat.toFixed(5)},${lng.toFixed(5)}`
     if (addresses[cacheKey]) return addresses[cacheKey]
 
     try {
-      const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`
-
-      const res = await fetch(url, {
-        headers: {
-          'User-Agent': 'GPS-Tracker-App/1.0[](https://github.com/Plumcmd/gps)',
-          'Accept-Language': 'ru-RU,ru;q=0.9,en;q=0.8',
-        },
+      const res = await fetch(`/api/address?lat=${lat}&lon=${lng}`, {
         cache: 'no-store',
       })
 
-      if (!res.ok) {
-        console.warn(`Nominatim HTTP ${res.status}`)
-        return 'Адрес не определён'
-      }
+      if (!res.ok) return 'Адрес не определён'
 
       const data = await res.json()
+      const address = data.address || 'Адрес не найден'
 
-      if (!data?.display_name) {
-        return 'Адрес не найден'
-      }
-
-      const shortAddress = data.display_name.split(', ').slice(0, 4).join(', ')
-      setAddresses(prev => ({ ...prev, [cacheKey]: shortAddress }))
-
-      return shortAddress
+      setAddresses(prev => ({ ...prev, [cacheKey]: address }))
+      return address
     } catch (err) {
       console.error('Ошибка получения адреса:', err)
       return 'Не удалось определить адрес'
@@ -189,6 +175,12 @@ const TrackerMap = forwardRef<TrackerMapRef>((props, ref) => {
 
   return (
     <div className="h-screen w-full relative">
+
+<div className="absolute left-4 top-1/2 -translate-y-1/2 z-[1000] pointer-events-none">
+  <div className="gps-text">
+    GPS Polska Flora
+  </div>
+</div>
 
       <Dialog open={!!selected} onOpenChange={() => setSelected(null)}>
         <DialogContent className="bg-zinc-900 border-white/10 text-white max-w-[92vw] md:max-w-md rounded-3xl p-0 overflow-hidden">

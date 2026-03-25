@@ -13,7 +13,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
-import { Plus, Car, Navigation, List, RefreshCw, Pencil, Trash2, Route } from 'lucide-react'
+import { Plus, RefreshCw, List, Pencil, Trash2, Route } from 'lucide-react'
 
 import { addDevice, updateAllDevices, fetchTodayHistory } from './actions'
 import { supabase } from '@/lib/supabase'
@@ -35,42 +35,24 @@ export default function Home() {
 
   const mapRef = useRef<any>(null)
 
-  // ==================== УЛУЧШЕННАЯ ФУНКЦИЯ АДРЕСА ====================
+  // ====================== ПОЛУЧЕНИЕ АДРЕСА ЧЕРЕЗ API ======================
   const getAddress = async (lat: number, lng: number): Promise<string> => {
     const cacheKey = `${lat.toFixed(5)},${lng.toFixed(5)}`
     
-    // Проверяем кэш
     if (addresses[cacheKey]) return addresses[cacheKey]
 
     try {
-      const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`
-
-      const res = await fetch(url, {
-        headers: {
-          'User-Agent': 'GPS-Tracker-App/1.0[](https://github.com/Plumcmd/gps)',
-          'Accept-Language': 'ru-RU,ru;q=0.9,en;q=0.8',
-        },
+      const res = await fetch(`/api/address?lat=${lat}&lon=${lng}`, {
         cache: 'no-store',
       })
 
-      if (!res.ok) {
-        console.warn(`Nominatim HTTP ${res.status}`)
-        return 'Адрес не определён'
-      }
+      if (!res.ok) return 'Адрес не определён'
 
       const data = await res.json()
+      const address = data.address || 'Адрес не найден'
 
-      if (!data?.display_name) {
-        return 'Адрес не найден'
-      }
-
-      // Красивый короткий адрес (первые 4 части)
-      const shortAddress = data.display_name.split(', ').slice(0, 4).join(', ')
-
-      // Сохраняем в локальный кэш
-      setAddresses(prev => ({ ...prev, [cacheKey]: shortAddress }))
-
-      return shortAddress
+      setAddresses(prev => ({ ...prev, [cacheKey]: address }))
+      return address
     } catch (err) {
       console.error('Ошибка получения адреса:', err)
       return 'Не удалось определить адрес'
@@ -85,8 +67,7 @@ export default function Home() {
     // Загружаем адреса для всех устройств
     for (const d of devList) {
       if (d.lat && d.lng) {
-        const addr = await getAddress(Number(d.lat), Number(d.lng))
-        setAddresses(prev => ({ ...prev, [d.imei]: addr }))
+        getAddress(Number(d.lat), Number(d.lng))
       }
     }
   }
@@ -94,14 +75,26 @@ export default function Home() {
   useEffect(() => {
     loadDevices()
 
-    // Обновление каждые 10 секунд — оптимально для отслеживания движения
-    const interval = setInterval(async () => {
+    // Обновление позиций каждые 10 секунд
+    const positionInterval = setInterval(async () => {
       await updateAllDevices()
       await loadDevices()
     }, 10000)
 
-    return () => clearInterval(interval)
-  }, [])
+    // Обновление адресов каждые 30 секунд
+    const addressInterval = setInterval(() => {
+      devices.forEach(device => {
+        if (device.lat && device.lng) {
+          getAddress(Number(device.lat), Number(device.lng))
+        }
+      })
+    }, 30000)
+
+    return () => {
+      clearInterval(positionInterval)
+      clearInterval(addressInterval)
+    }
+  }, [devices]) // зависимость от devices для адресов
 
   useEffect(() => {
     const channel = supabase
@@ -164,16 +157,6 @@ export default function Home() {
         <TrackerMap ref={mapRef} />
       </div>
 
-      {/* ТОП БАР */}
-      <div className="absolute top-0 left-0 right-0 z-50 bg-black/70 backdrop-blur-2xl border-b border-white/10 px-4 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-green-500 rounded-2xl flex items-center justify-center">
-            <Car className="w-5 h-5 text-black" />
-          </div>
-          <h1 className="text-2xl font-bold tracking-tighter">GPS Трекер</h1>
-        </div>
-      </div>
-
       {/* ПЛАВАЮЩИЕ КНОПКИ */}
       <div className="absolute bottom-6 left-4 z-[1000]">
         <Button
@@ -184,7 +167,7 @@ export default function Home() {
         </Button>
       </div>
 
-      <div className="absolute bottom-24 right-5 z-[1000] flex flex-col gap-3">
+      <div className="absolute bottom-6 right-5 z-[1000] flex flex-col gap-3">
         <Button
           onClick={async () => { await updateAllDevices(); toast.success('Обновлено') }}
           className="w-12 h-12 bg-zinc-900/90 hover:bg-zinc-800 border border-white/20 rounded-3xl flex items-center justify-center"
