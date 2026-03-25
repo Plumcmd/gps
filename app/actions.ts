@@ -99,12 +99,13 @@ export async function fetchTodayHistory(imei: string) {
 
     if (json.ret !== 1) throw new Error(json.msg || 'Ошибка запроса истории')
 
+    // ✅ Исправлено: явно указываем тип параметра
     const points = (json.data || [])
       .map((p: any) => ({
         lat: parseFloat(p.lat || p.latitude || '0'),
         lng: parseFloat(p.lng || p.longitude || '0'),
       }))
-      .filter((p): p is { lat: number; lng: number } => 
+      .filter((p: { lat: number; lng: number }): p is { lat: number; lng: number } =>
         !isNaN(p.lat) && !isNaN(p.lng)
       )
 
