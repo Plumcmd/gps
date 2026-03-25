@@ -99,7 +99,7 @@ export async function fetchTodayHistory(imei: string) {
 
     if (json.ret !== 1) throw new Error(json.msg || 'Ошибка запроса истории')
 
-    // Исправлено: убрана ошибка TypeScript (Parameter 'p' implicitly has an 'any' type)
+    // ✅ Исправлено: убрана ошибка TypeScript
     const points = (json.data || [])
       .map((p: any) => ({
         lat: parseFloat(p.lat || p.latitude || '0'),
