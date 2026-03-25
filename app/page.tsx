@@ -35,14 +35,44 @@ export default function Home() {
 
   const mapRef = useRef<any>(null)
 
+  // ==================== УЛУЧШЕННАЯ ФУНКЦИЯ АДРЕСА ====================
   const getAddress = async (lat: number, lng: number): Promise<string> => {
+    const cacheKey = `${lat.toFixed(5)},${lng.toFixed(5)}`
+    
+    // Проверяем кэш
+    if (addresses[cacheKey]) return addresses[cacheKey]
+
     try {
-      const res = await fetch(
-        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`
-      )
+      const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`
+
+      const res = await fetch(url, {
+        headers: {
+          'User-Agent': 'GPS-Tracker-App/1.0[](https://github.com/Plumcmd/gps)',
+          'Accept-Language': 'ru-RU,ru;q=0.9,en;q=0.8',
+        },
+        cache: 'no-store',
+      })
+
+      if (!res.ok) {
+        console.warn(`Nominatim HTTP ${res.status}`)
+        return 'Адрес не определён'
+      }
+
       const data = await res.json()
-      return data.display_name?.split(', ').slice(0, 3).join(', ') || 'Адрес не найден'
-    } catch {
+
+      if (!data?.display_name) {
+        return 'Адрес не найден'
+      }
+
+      // Красивый короткий адрес (первые 4 части)
+      const shortAddress = data.display_name.split(', ').slice(0, 4).join(', ')
+
+      // Сохраняем в локальный кэш
+      setAddresses(prev => ({ ...prev, [cacheKey]: shortAddress }))
+
+      return shortAddress
+    } catch (err) {
+      console.error('Ошибка получения адреса:', err)
       return 'Не удалось определить адрес'
     }
   }
@@ -52,17 +82,19 @@ export default function Home() {
     const devList = data || []
     setDevices(devList)
 
-    devList.forEach(async (d: Device) => {
+    // Загружаем адреса для всех устройств
+    for (const d of devList) {
       if (d.lat && d.lng) {
         const addr = await getAddress(Number(d.lat), Number(d.lng))
         setAddresses(prev => ({ ...prev, [d.imei]: addr }))
       }
-    })
+    }
   }
 
   useEffect(() => {
     loadDevices()
 
+    // Обновление каждые 10 секунд — оптимально для отслеживания движения
     const interval = setInterval(async () => {
       await updateAllDevices()
       await loadDevices()
@@ -245,7 +277,6 @@ export default function Home() {
                     </div>
                   </div>
 
-                  {/* Информация о трекере */}
                   <div className="mt-4 flex flex-wrap gap-2 text-xs">
                     <div className={`px-3 py-1 rounded-2xl flex items-center gap-1.5 ${isTrackerOnline ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>
                       {isTrackerOnline ? '📡 Трекер в сети' : '📴 Трекер не в сети'}

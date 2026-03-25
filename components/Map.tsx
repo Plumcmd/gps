@@ -52,7 +52,6 @@ const TrackerMap = forwardRef<TrackerMapRef>((props, ref) => {
   const mapRef = useRef<L.Map | null>(null)
   const markersRef = useRef<Record<string, L.Marker>>({})
 
-  // Загрузка устройств
   const loadDevices = async () => {
     const { data } = await supabase.from('devices').select('*')
     const valid = data?.filter(d =>
@@ -61,7 +60,6 @@ const TrackerMap = forwardRef<TrackerMapRef>((props, ref) => {
     setDevices(valid)
   }
 
-  // Подписка на обновления
   useEffect(() => {
     loadDevices()
 
@@ -98,22 +96,44 @@ const TrackerMap = forwardRef<TrackerMapRef>((props, ref) => {
     return () => { void supabase.removeChannel(channel) }
   }, [])
 
-  // Получение адреса
+  // ==================== УЛУЧШЕННАЯ ФУНКЦИЯ АДРЕСА ====================
   const getAddress = async (lat: number, lng: number): Promise<string> => {
+    const cacheKey = `${lat.toFixed(5)},${lng.toFixed(5)}`
+    if (addresses[cacheKey]) return addresses[cacheKey]
+
     try {
-      const res = await fetch(
-        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`
-      )
-      if (!res.ok) return 'Адрес не определён'
+      const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`
+
+      const res = await fetch(url, {
+        headers: {
+          'User-Agent': 'GPS-Tracker-App/1.0[](https://github.com/Plumcmd/gps)',
+          'Accept-Language': 'ru-RU,ru;q=0.9,en;q=0.8',
+        },
+        cache: 'no-store',
+      })
+
+      if (!res.ok) {
+        console.warn(`Nominatim HTTP ${res.status}`)
+        return 'Адрес не определён'
+      }
+
       const data = await res.json()
-      return data.display_name?.split(', ').slice(0, 3).join(', ') || 'Адрес не определён'
-    } catch {
+
+      if (!data?.display_name) {
+        return 'Адрес не найден'
+      }
+
+      const shortAddress = data.display_name.split(', ').slice(0, 4).join(', ')
+      setAddresses(prev => ({ ...prev, [cacheKey]: shortAddress }))
+
+      return shortAddress
+    } catch (err) {
+      console.error('Ошибка получения адреса:', err)
       return 'Не удалось определить адрес'
     }
   }
 
   const loadAddress = async (imei: string, lat: number, lng: number) => {
-    if (addresses[imei]) return
     const addr = await getAddress(lat, lng)
     setAddresses(prev => ({ ...prev, [imei]: addr }))
   }
@@ -126,7 +146,6 @@ const TrackerMap = forwardRef<TrackerMapRef>((props, ref) => {
     })
   }, [devices])
 
-  // Умный статус (одинаковый везде)
   const getDeviceStatus = (device: Device) => {
     const minutesAgo = device.last_updated
       ? (Date.now() - new Date(device.last_updated).getTime()) / 1000 / 60
@@ -146,10 +165,9 @@ const TrackerMap = forwardRef<TrackerMapRef>((props, ref) => {
       trackerOnline = true
     }
 
-    return { statusText, statusColor, trackerOnline, minutesAgo }
+    return { statusText, statusColor, trackerOnline }
   }
 
-  // Методы для родителя
   useImperativeHandle(ref, () => ({
     flyTo: (pos, zoom = 15) => {
       mapRef.current?.flyTo(pos, zoom, { duration: 1.2 })
@@ -172,7 +190,6 @@ const TrackerMap = forwardRef<TrackerMapRef>((props, ref) => {
   return (
     <div className="h-screen w-full relative">
 
-      {/* МОДАЛЬНОЕ ОКНО */}
       <Dialog open={!!selected} onOpenChange={() => setSelected(null)}>
         <DialogContent className="bg-zinc-900 border-white/10 text-white max-w-[92vw] md:max-w-md rounded-3xl p-0 overflow-hidden">
           <DialogHeader className="px-6 pt-6 pb-4 border-b border-white/10">
@@ -187,13 +204,9 @@ const TrackerMap = forwardRef<TrackerMapRef>((props, ref) => {
               return (
                 <>
                   <div className="flex justify-between items-start">
-                    <div className="flex-1">
-                      <div className="text-2xl font-bold text-white">
-                        {selected.name || 'Автомобиль'}
-                      </div>
-                      <div className="text-sm text-zinc-400 mt-1">
-                        {selected.imei}
-                      </div>
+                    <div>
+                      <div className="text-2xl font-bold">{selected.name || 'Автомобиль'}</div>
+                      <div className="text-sm text-zinc-400 mt-1">{selected.imei}</div>
                     </div>
                     <div className={`px-4 h-7 rounded-3xl flex items-center text-sm font-medium ${statusColor}`}>
                       {statusText}
@@ -201,8 +214,8 @@ const TrackerMap = forwardRef<TrackerMapRef>((props, ref) => {
                   </div>
 
                   <div>
-                    <div className="text-xs text-zinc-400 mb-1">📍 Текущее местоположение</div>
-                    <div className="text-base text-zinc-200 leading-tight">
+                    <div className="text-xs text-zinc-400 mb-1">📍 Местоположение</div>
+                    <div className="text-base text-zinc-200">
                       {addresses[selected.imei] || 'Определяем адрес...'}
                     </div>
                   </div>
@@ -223,14 +236,11 @@ const TrackerMap = forwardRef<TrackerMapRef>((props, ref) => {
                       size="sm"
                       variant="outline"
                       className="flex-1 border-green-500/30 text-green-400 hover:bg-green-500/10"
-                      onClick={() => {
-                        window.open(`https://www.google.com/maps/dir/?api=1&destination=${selected.lat},${selected.lng}`)
-                      }}
+                      onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${selected.lat},${selected.lng}`)}
                     >
                       <Navigation className="w-4 h-4 mr-2" />
                       Маршрут в Google
                     </Button>
-
                     <Button
                       size="sm"
                       variant="outline"
@@ -247,7 +257,6 @@ const TrackerMap = forwardRef<TrackerMapRef>((props, ref) => {
         </DialogContent>
       </Dialog>
 
-      {/* КАРТА */}
       <MapContainer
         center={defaultCenter}
         zoom={10}
