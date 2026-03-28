@@ -439,3 +439,29 @@ body > div:last-child:not(.leaflet-container) > div:last-child {
 .ios-switch:hover {
   transform: scale(1.05);
 }
+
+@keyframes cyberPopup {
+  0% {
+    opacity: 0;
+    transform: translateY(6px) scale(0.95);
+    filter: blur(4px);
+  }
+  15% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+  85% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+    filter: blur(3px);
+  }
+}
+
+.animate-cyberPopup {
+  animation: cyberPopup 3s ease forwards;
+}

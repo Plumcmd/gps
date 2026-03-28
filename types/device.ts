@@ -1,10 +1,11 @@
 export interface Device {
   imei: string
   name?: string
-  lat: number | string
-  lng: number | string
+  lat?: number | string
+  lng?: number | string
   speed?: number | null
-  isOnline?: boolean
-  course?: number | null
+  voltage?: number | null     // ← важно
+  last_updated?: string
+  gps_time?: string
   [key: string]: any
 }

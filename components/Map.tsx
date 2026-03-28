@@ -1,3 +1,4 @@
+// components/Map.tsx
 'use client'
 
 import {
@@ -17,15 +18,12 @@ import {
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 
-import { Sun, Moon } from 'lucide-react'
-
 import { supabase } from '@/lib/supabase'
-import { Navigation } from 'lucide-react'
+import { Navigation, Battery } from 'lucide-react'
 import { Device } from "@/types/device"
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
@@ -51,10 +49,17 @@ const TrackerMap = forwardRef<TrackerMapRef>((props, ref) => {
   const [addresses, setAddresses] = useState<Record<string, string>>({})
   const [selected, setSelected] = useState<Device | null>(null)
 
-
   const mapRef = useRef<L.Map | null>(null)
   const markersRef = useRef<Record<string, L.Marker>>({})
 
+const [showDev, setShowDev] = useState(false);
+
+const handleDevClick = () => {
+  setShowDev(true);
+  setTimeout(() => setShowDev(false), 3000);
+};
+
+  
   const loadDevices = async () => {
     const { data } = await supabase.from('devices').select('*')
     const valid = data?.filter(d =>
@@ -63,12 +68,7 @@ const TrackerMap = forwardRef<TrackerMapRef>((props, ref) => {
     setDevices(valid)
   }
 
-  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
-  if (typeof window !== 'undefined') {
-    return (localStorage.getItem('theme') as 'dark' | 'light') || 'light'
-  }
-  return 'light'
-})
+  const [theme, setTheme] = useState<'dark' | 'light'>('dark')
 
   useEffect(() => {
     loadDevices()
@@ -106,29 +106,19 @@ const TrackerMap = forwardRef<TrackerMapRef>((props, ref) => {
     return () => { void supabase.removeChannel(channel) }
   }, [])
 
-  useEffect(() => {
-  localStorage.setItem('theme', theme)
-}, [theme])
-
-  // ====================== ПОЛУЧЕНИЕ АДРЕСА ЧЕРЕЗ API ======================
+  // ====================== АДРЕС ======================
   const getAddress = async (lat: number, lng: number): Promise<string> => {
     const cacheKey = `${lat.toFixed(5)},${lng.toFixed(5)}`
     if (addresses[cacheKey]) return addresses[cacheKey]
 
     try {
-      const res = await fetch(`/api/address?lat=${lat}&lon=${lng}`, {
-        cache: 'no-store',
-      })
-
+      const res = await fetch(`/api/address?lat=${lat}&lon=${lng}`, { cache: 'no-store' })
       if (!res.ok) return 'Адрес не определён'
-
       const data = await res.json()
       const address = data.address || 'Адрес не найден'
-
       setAddresses(prev => ({ ...prev, [cacheKey]: address }))
       return address
-    } catch (err) {
-      console.error('Ошибка получения адреса:', err)
+    } catch {
       return 'Не удалось определить адрес'
     }
   }
@@ -146,26 +136,38 @@ const TrackerMap = forwardRef<TrackerMapRef>((props, ref) => {
     })
   }, [devices])
 
-  const getDeviceStatus = (device: Device) => {
+  // ====================== СТАТУС И НАПРЯЖЕНИЕ ======================
+  const getDeviceInfo = (device: Device) => {
     const minutesAgo = device.last_updated
       ? (Date.now() - new Date(device.last_updated).getTime()) / 1000 / 60
       : 9999
 
     let statusText = 'Оффлайн'
-    let statusColor = 'bg-red-500/20 text-red-400'
-    let trackerOnline = false
+    let statusColor = 'bg-red-500/20 text-red-400 border-red-500/30'
 
     if (minutesAgo < 10) {
       statusText = 'Онлайн'
-      statusColor = 'bg-green-500/20 text-green-400'
-      trackerOnline = true
+      statusColor = 'bg-green-500/20 text-green-400 border-green-500/30'
     } else if (minutesAgo < 60) {
       statusText = `Был ${Math.floor(minutesAgo)} мин назад`
-      statusColor = 'bg-yellow-500/20 text-yellow-400'
-      trackerOnline = true
+      statusColor = 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30'
     }
 
-    return { statusText, statusColor, trackerOnline }
+    const voltage = device.voltage ? Number(device.voltage) : null
+    let batteryColor = 'text-zinc-500'
+    let batteryText = '-- V'
+
+    if (voltage) {
+      batteryText = voltage.toFixed(1) + ' V'
+      if (voltage >= 12.8) batteryColor = 'text-emerald-400'
+      else if (voltage >= 12.4) batteryColor = 'text-green-400'
+      else if (voltage >= 12.0) batteryColor = 'text-yellow-400'
+      else batteryColor = 'text-red-400'
+    }
+
+    const speed = device.speed ? Number(device.speed) : 0
+
+    return { statusText, statusColor, voltage, batteryColor, batteryText, speed, minutesAgo }
   }
 
   useImperativeHandle(ref, () => ({
@@ -189,95 +191,182 @@ const TrackerMap = forwardRef<TrackerMapRef>((props, ref) => {
 
   return (
     <div className="h-screen w-full relative">
+      {/* Переключатель темы */}
+      <div className="absolute bottom-40 right-4 z-[1000]">
+        <button
+          onClick={() => setTheme(prev => prev === 'dark' ? 'light' : 'dark')}
+          className={`ios-switch ${theme === 'light' ? 'active' : ''}`}
+        >
+          <span className="icon moon">☽</span>
+          <span className="icon sun">☼</span>
+          <span className="thumb" />
+        </button>
+      </div>
 
-{/* iOS Toggle */}
-<div className="absolute bottom-37 right-4 z-[1000]">
-  <button
-    onClick={() => setTheme(prev => prev === 'dark' ? 'light' : 'dark')}
-    className={`ios-switch ${theme === 'light' ? 'active' : ''}`}
-  >
-    {/* 🌙 */}
-    <Moon className="icon moon" size={14} />
-
-    {/* ☀️ */}
-    <Sun className="icon sun" size={14} />
-
-    {/* бегунок */}
-    <span className="thumb" />
-  </button>
-</div>
-
-<div className="absolute left-4 top-1/2 -translate-y-1/2 z-[1000] pointer-events-none">
-  <div className="gps-text">
+<div 
+  className="absolute left-4 top-1/2 -translate-y-1/2 z-[1000]"
+  onClick={handleDevClick}
+>
+  <div className="
+    gps-text cursor-pointer select-none
+    text-cyan-300 font-semibold tracking-wider
+    drop-shadow-[0_0_6px_rgba(0,255,255,0.7)]
+    hover:drop-shadow-[0_0_12px_rgba(0,255,255,1)]
+    transition-all duration-300
+  ">
     GPS Polska Flora
   </div>
+
+  {showDev && (
+    <div className="
+      absolute left-0 top-full mt-3
+      px-4 py-2
+      rounded-lg
+      text-sm font-bold
+      text-cyan-300
+      bg-black/70
+      backdrop-blur-xl
+      border border-cyan-400/40
+      shadow-[0_0_20px_rgba(0,255,255,0.6)]
+      animate-cyberPopup
+      pointer-events-none
+      tracking-widest
+      glitch
+    ">
+      Разработчик: Vladyslav Oliinyk
+    </div>
+  )}
 </div>
 
+
+      {/* Модальное окно */}
       <Dialog open={!!selected} onOpenChange={() => setSelected(null)}>
-        <DialogContent className="bg-zinc-900 border-white/10 text-white max-w-[92vw] md:max-w-md rounded-3xl p-0 overflow-hidden">
-          <DialogHeader className="px-6 pt-6 pb-4 border-b border-white/10">
-            <DialogTitle className="text-2xl">Информация об устройстве</DialogTitle>
-          </DialogHeader>
+        <DialogContent className="bg-zinc-900 border border-white/10 text-white max-w-[92vw] md:max-w-md rounded-3xl z-[1300] p-0 overflow-hidden">
+          {selected && (() => {
+            const info = getDeviceInfo(selected)
+            const address = addresses[selected.imei] || 'Определяем адрес...'
 
-          <div className="p-6 space-y-6">
-            {selected && (() => {
-              const { statusText, statusColor, trackerOnline } = getDeviceStatus(selected)
-              const speed = selected.speed ? Number(selected.speed) : 0
+            // Вычисляем износ АКБ в %
+            const batteryWear = info.voltage
+              ? Math.max(0, Math.min(100, Math.round((12.8 - info.voltage) * 50)))
+              : 0
 
-              return (
-                <>
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <div className="text-2xl font-bold">{selected.name || 'Автомобиль'}</div>
-                      <div className="text-sm text-zinc-400 mt-1">{selected.imei}</div>
+            return (
+              <>
+                {/* Шапка */}
+                <div className="bg-gradient-to-r from-zinc-800 to-zinc-950 px-5 py-5 border-b border-white/10">
+                  <div className="flex items-center gap-3">
+                    <div className="min-w-0 flex-1">
+                     
+                      <DialogTitle className="text-lg font-semibold leading-tight truncate">
+                        {selected.name || 'Автомобиль'} 
+                      </DialogTitle>
+                      
+                      <p className="text-xs text-zinc-500 font-mono mt-0.5">{selected.imei}</p>
                     </div>
-                    <div className={`px-4 h-7 rounded-3xl flex items-center text-sm font-medium ${statusColor}`}>
-                      {statusText}
-                    </div>
+                                             {/* Статус над именем */}
+
                   </div>
+                                            <div className={`text-[8px] px-3 py-1 rounded-full font-medium border ${info.statusColor} mb-1 inline-block mt-[10px]`}>
+  {info.statusText}
+</div> 
+                </div>
 
+                <div className="p-5 space-y-5">
+                  
+                  {/* Адрес */}
                   <div>
-                    <div className="text-xs text-zinc-400 mb-1">📍 Местоположение</div>
-                    <div className="text-base text-zinc-200">
-                      {addresses[selected.imei] || 'Определяем адрес...'}
+                    
+                    <div className="text-xs text-zinc-500 mb-1.5">Местоположение:</div>
+                    <div className="text-sm leading-snug bg-zinc-950 border border-white/10 p-3.5 rounded-2xl">
+                      {address}
                     </div>
                   </div>
 
-                  <div>
-                    <div className="text-xs text-zinc-400 mb-1">🚗 Скорость</div>
-                    <div className="text-4xl font-semibold text-white">
-                      {speed > 0 ? `${speed} км/ч` : '0 км/ч'}
+                  {/* Скорость + Напряжение */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-zinc-950 border border-white/10 rounded-2xl p-4">
+                      <div className="text-xs text-zinc-500 mb-1">Скорость:</div>
+                      <div className="text-3xl font-semibold tabular-nums">
+                        {info.speed > 0 ? info.speed : '—'}
+                        <span className="text-base text-zinc-500 ml-1">км/ч</span>
+                      </div>
+                      {info.speed === 0 && <div className="text-xs text-emerald-400 mt-1">Не в движении</div>}
+                    </div>
+
+                    {/* Аккумулятор с технологичным дизайном */}
+                    <div className="bg-zinc-950 border border-white/10 rounded-2xl p-4 space-y-2">
+                      <div className="text-xs text-zinc-500 mb-1 flex items-center gap-1">
+                        <Battery className="w-4 h-4" /> Аккумулятор:
+                      </div>
+                      <div className={`text-3xl font-semibold tabular-nums ${info.batteryColor}`}>
+                        {info.batteryText}
+                      </div>
+
+                      {/* Состояние и примечание */}
+                      {info.voltage && (
+                        <div className="space-y-1">
+                          <div className="text-xs text-zinc-400 flex justify-between">
+                            <span>
+                              {info.voltage >= 12.8 ? 'Отличное' :
+                               info.voltage >= 12.2 ? 'Хорошее' :
+                               'Низкое'}
+                            </span>
+                            <span className="font-mono">{batteryWear}%</span>
+                          </div>
+
+                          {/* Прогресс-бар */}
+                          <div className="w-full h-2 bg-zinc-800 rounded-full overflow-hidden">
+                            <div
+                              className={`h-2 rounded-full transition-all duration-500 ${
+                                info.voltage >= 12.8 ? 'bg-emerald-400' :
+                                info.voltage >= 12.2 ? 'bg-yellow-400' :
+                                'bg-red-500'
+                              }`}
+                              style={{ width: `${batteryWear}%` }}
+                            />
+                          </div>
+
+                          {/* Примечание */}
+                          {info.voltage >= 12.8 ? null :
+                            info.voltage >= 12.2 ? (
+                              <div className="text-yellow-400 text-[10px] font-mono">
+                                ⚠️ Напряжение чуть ниже идеала — проверьте контакты и кабели.
+                              </div>
+                            ) : (
+                              <div className="text-red-400 text-[10px] font-mono">
+                                ❌ Напряжение низкое — возможно разряд или износ АКБ. Требуется обслуживание.
+                              </div>
+                            )
+                          }
+                        </div>
+                      )}
                     </div>
                   </div>
 
-                  <div className={`px-4 py-2 rounded-2xl text-sm flex items-center gap-2 ${trackerOnline ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>
-                    {trackerOnline ? '📡 Трекер в сети' : '📴 Трекер не в сети'}
-                  </div>
-
-                  <div className="flex gap-2 pt-4">
+                  {/* Кнопки */}
+                  <div className="flex gap-3 pt-2">
                     <Button
-                      size="sm"
-                      variant="outline"
-                      className="flex-1 border-green-500/30 text-green-400 hover:bg-green-500/10"
-                      onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${selected.lat},${selected.lng}`)}
+                      onClick={() => 
+                        window.open(`https://www.google.com/maps/dir/?api=1&destination=${selected.lat},${selected.lng}`, '_blank')
+                      }
+                      className="flex-1 h-11 bg-white hover:bg-white/90 text-black rounded-2xl text-sm font-medium"
                     >
-                      <Navigation className="w-4 h-4 mr-2" />
                       Маршрут в Google
                     </Button>
+
                     <Button
-                      size="sm"
                       variant="outline"
-                      className="flex-1 border-white/20 text-white hover:bg-white/10"
                       onClick={() => setSelected(null)}
+                      className="flex-1 h-11 border-white/20 hover:bg-white/5 rounded-2xl text-sm"
                     >
                       Закрыть
                     </Button>
-
                   </div>
-                </>
-              )
-            })()}
-          </div>
+                </div>
+              </>
+            )
+          })()}
         </DialogContent>
       </Dialog>
 
@@ -289,14 +378,13 @@ const TrackerMap = forwardRef<TrackerMapRef>((props, ref) => {
         zoomControl={false}
         attributionControl={false}
       >
-        
-<TileLayer
-  url={
-    theme === 'dark'
-      ? "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-      : "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
-  }
-/>
+        <TileLayer
+          url={
+            theme === 'dark'
+              ? "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+              : "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
+          }
+        />
 
         {devices.map(device => {
           const lat = Number(device.lat)
@@ -313,18 +401,18 @@ const TrackerMap = forwardRef<TrackerMapRef>((props, ref) => {
                 className: '',
                 html: `
                   <div class="relative">
-                    <div class="w-4 h-4 bg-green-500 rounded-full shadow-[0_0_12px_4px_rgba(34,197,94,0.9)] animate-pulse"></div>
+                    <div class="w-5 h-5 bg-green-500 rounded-full shadow-[0_0_15px_6px_rgba(34,197,94,0.8)] animate-pulse"></div>
                   </div>
                 `,
-                iconSize: [16, 16],
-                iconAnchor: [8, 8]
+                iconSize: [20, 20],
+                iconAnchor: [10, 10]
               })}
             >
               <Tooltip
                 direction="top"
-                offset={[0, -10]}
+                offset={[0, -12]}
                 permanent
-                className="!bg-black/90 !text-white !px-3 !py-1 !rounded-xl !text-xs !border !border-white/20 shadow-2xl"
+                className="!bg-black/90 !text-white !px-3 !py-1 !rounded-xl !text-sm !border !border-white/20 shadow-2xl"
               >
                 {device.name || device.imei.slice(-6)}
               </Tooltip>
@@ -333,7 +421,7 @@ const TrackerMap = forwardRef<TrackerMapRef>((props, ref) => {
         })}
 
         {route.length > 0 && (
-          <Polyline positions={route} color="#22c55e" weight={5} opacity={0.9} />
+          <Polyline positions={route} color="#22c55e" weight={6} opacity={0.85} />
         )}
       </MapContainer>
     </div>
