@@ -465,3 +465,4 @@ body > div:last-child:not(.leaflet-container) > div:last-child {
 .animate-cyberPopup {
   animation: cyberPopup 3s ease forwards;
 }
+

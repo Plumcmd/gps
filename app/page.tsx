@@ -318,102 +318,140 @@ export default function Home() {
       </Dialog>
 
       {/* Диалог списка устройств */}
-      <Dialog open={showList} onOpenChange={setShowList}>
-        <DialogContent className="bg-zinc-900 border border-white/10 text-white max-w-[92vw] md:max-w-lg rounded-3xl z-[1200] flex flex-col max-h-[92vh]">
-          <DialogHeader>
-            <DialogTitle className="text-2xl">Мои автомобили</DialogTitle>
-            <DialogDescription className="text-zinc-400">Список всех подключённых GPS-трекеров</DialogDescription>
-          </DialogHeader>
+<Dialog open={showList} onOpenChange={setShowList}>
+  <DialogContent className="
+    bg-zinc-900 border border-white/10 text-white 
+    max-w-[92vw] md:max-w-lg 
+    rounded-3xl z-[1200] 
+    flex flex-col 
+    max-h-[92vh] 
+    overflow-hidden
+  ">
+    <DialogHeader>
+      <DialogTitle className="text-xl md:text-2xl">Мои автомобили</DialogTitle>
+      <DialogDescription className="text-zinc-400 text-sm md:text-base">
+        Список всех подключённых GPS-трекеров
+      </DialogDescription>
+    </DialogHeader>
 
-          <div className="flex-1 overflow-y-auto mt-6 space-y-4 pr-2">
-            {devices.map(device => {
-              const lat = Number(device.lat)
-              const lng = Number(device.lng)
-              const hasPos = !isNaN(lat) && !isNaN(lng)
-              const address = addresses[`${lat.toFixed(5)},${lng.toFixed(5)}`] || 'Определяем адрес...'
+    <div className="flex-1 overflow-y-auto overscroll-contain mt-6 space-y-4 pr-1 md:pr-2">
+      {devices.map(device => {
+        const lat = Number(device.lat)
+        const lng = Number(device.lng)
+        const hasPos = !isNaN(lat) && !isNaN(lng)
+        const address = addresses[`${lat.toFixed(5)},${lng.toFixed(5)}`] || 'Определяем адрес...'
 
-              const minutesAgo = calculateMinutesAgo(device.last_updated)
-              let statusText = 'Оффлайн'
-              let statusColor = 'bg-red-500/20 text-red-400'
+        const minutesAgo = calculateMinutesAgo(device.last_updated)
+        let statusText = 'Оффлайн'
+        let statusColor = 'bg-red-500/20 text-red-400'
 
-              if (minutesAgo < 10) {
-                statusText = 'Онлайн'
-                statusColor = 'bg-green-500/20 text-green-400'
-              } else if (minutesAgo < 60) {
-                statusText = `Был ${Math.floor(minutesAgo)} мин назад`
-                statusColor = 'bg-yellow-500/20 text-yellow-400'
-              }
+        if (minutesAgo < 10) {
+          statusText = 'Онлайн'
+          statusColor = 'bg-green-500/20 text-green-400'
+        } else if (minutesAgo < 60) {
+          statusText = `Был ${Math.floor(minutesAgo)} мин назад`
+          statusColor = 'bg-yellow-500/20 text-yellow-400'
+        }
 
-              return (
-                <div
-                  key={device.imei}
-                  onClick={() => handleDeviceClick(device)}
-                  className="bg-zinc-950 p-5 rounded-3xl border border-white/10 hover:border-green-500/40 cursor-pointer active:scale-[0.98] transition-all"
-                >
-                  <div className="flex justify-between items-start">
-                    <div className="flex-1">
-                      <p className="font-semibold text-xl">{device.name || 'Автомобиль'}</p>
-                      <p className="text-zinc-400 text-sm mt-0.5">{device.imei}</p>
-                      {hasPos && <p className="text-zinc-500 text-xs mt-3 line-clamp-2">{address}</p>}
-                    </div>
-                    <div className={`text-xs px-4 h-7 rounded-3xl flex items-center font-medium ${statusColor}`}>
-                      {statusText}
-                    </div>
-                  </div>
+        return (
+          <div
+            key={device.imei}
+            onClick={() => handleDeviceClick(device)}
+            className="
+              bg-zinc-950 
+              p-4 md:p-5 
+              rounded-3xl 
+              border border-white/10 
+              hover:border-green-500/40 
+              cursor-pointer 
+              active:scale-[0.98] 
+              transition-all
+            "
+          >
+            <div className="flex justify-between items-start gap-3">
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-lg md:text-xl truncate">
+                  {device.name || 'Автомобиль'}
+                </p>
+                <p className="text-zinc-400 text-xs md:text-sm mt-0.5 break-all">
+                  {device.imei}
+                </p>
+                {hasPos && (
+                  <p className="text-zinc-500 text-xs mt-3 line-clamp-2 break-words">
+                    {address}
+                  </p>
+                )}
+              </div>
 
-                  <div className="mt-4 flex flex-wrap gap-2 text-xs">
-                    {device.voltage && (
-                      <div className="px-3 py-1 rounded-2xl bg-zinc-800 text-zinc-400">
-                        🔋 {Number(device.voltage).toFixed(1)} V
-                      </div>
-                    )}
-                    <div className="px-3 py-1 rounded-2xl bg-zinc-800 text-zinc-400">
-                      🚗 {getSpeedText(device.speed)}
-                    </div>
-                  </div>
+              <div className={`
+                text-[10px] md:text-xs 
+                px-3 md:px-4 
+                h-6 md:h-7 
+                rounded-3xl 
+                flex items-center 
+                font-medium 
+                ${statusColor}
+                whitespace-nowrap
+              `}>
+                {statusText}
+              </div>
+            </div>
 
-                  <div className="flex gap-2 mt-5">
-                    <Button 
-                      size="sm" 
-                      variant="outline" 
-                      className="flex-1 border-white/20 text-white hover:bg-white/10"
-                      onClick={e => { e.stopPropagation(); setEditingDevice(device); setNewName(device.name || '') }}
-                    >
-                      <Pencil className="w-4 h-4 mr-2" /> Изменить
-                    </Button>
-                    <Button 
-                      size="sm" 
-                      variant="outline" 
-                      className="flex-1 border-red-500/30 text-red-400 hover:bg-red-500/10"
-                      onClick={e => { e.stopPropagation(); deleteDevice(device.imei) }}
-                    >
-                      <Trash2 className="w-4 h-4 mr-2" /> Удалить
-                    </Button>
-                    {hasPos && (
-                      <Button 
-                        size="sm" 
-                        variant="outline" 
-                        className="flex-1 border-green-500/30 text-green-400 hover:bg-green-500/10"
-                        onClick={async (e) => { 
-                          e.stopPropagation(); 
-                          await loadHistory(device.imei); 
-                          setShowList(false) 
-                        }}
-                      >
-                        <Route className="w-4 h-4 mr-2" /> Трек
-                      </Button>
-                    )}
-                  </div>
+            <div className="mt-4 flex flex-wrap gap-2 text-[10px] md:text-xs">
+              {device.voltage && (
+                <div className="px-3 py-1 rounded-2xl bg-zinc-800 text-zinc-400">
+                  🔋 {Number(device.voltage).toFixed(1)} V
                 </div>
-              )
-            })}
+              )}
+              <div className="px-3 py-1 rounded-2xl bg-zinc-800 text-zinc-400">
+                🚗 {getSpeedText(device.speed)}
+              </div>
+            </div>
 
-            {devices.length === 0 && (
-              <div className="text-center text-zinc-500 py-12">Устройств пока нет</div>
-            )}
+            <div className="flex flex-wrap gap-2 mt-5">
+  <Button 
+    size="sm" 
+    variant="outline" 
+    className="flex-1 min-w-[120px] max-w-[45%] border-white/20 text-white hover:bg-white/10"
+    onClick={e => { e.stopPropagation(); setEditingDevice(device); setNewName(device.name || '') }}
+  >
+    <Pencil className="w-4 h-4 mr-1.5" /> Изменить
+  </Button>
+  <Button 
+    size="sm" 
+    variant="outline" 
+    className="flex-1 min-w-[120px] max-w-[45%] border-red-500/30 text-red-400 hover:bg-red-500/10"
+    onClick={e => { e.stopPropagation(); deleteDevice(device.imei) }}
+  >
+    <Trash2 className="w-4 h-4 mr-1.5" /> Удалить
+  </Button>
+  {hasPos && (
+    <Button 
+      size="sm" 
+      variant="outline" 
+      className="flex-1 min-w-[120px] max-w-[45%] border-green-500/30 text-green-400 hover:bg-green-500/10"
+      onClick={async (e) => { 
+        e.stopPropagation(); 
+        await loadHistory(device.imei); 
+        setShowList(false) 
+      }}
+    >
+      <Route className="w-4 h-4 mr-1.5" /> Трек
+    </Button>
+  )}
+</div>
           </div>
-        </DialogContent>
-      </Dialog>
+        )
+      })}
+
+      {devices.length === 0 && (
+        <div className="text-center text-zinc-500 py-12 text-sm md:text-base">
+          Устройств пока нет
+        </div>
+      )}
+    </div>
+  </DialogContent>
+</Dialog>
 
       {/* Диалог уведомлений */}
       <Dialog open={showNotifications} onOpenChange={setShowNotifications}>
