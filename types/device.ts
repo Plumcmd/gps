@@ -4,7 +4,8 @@ export interface Device {
   lat?: number | string
   lng?: number | string
   speed?: number | null
-  voltage?: number | null     // ← важно
+  voltage?: number | null
+  course?: number | null      // ← НОВОЕ ПОЛЕ
   last_updated?: string
   gps_time?: string
   [key: string]: any
