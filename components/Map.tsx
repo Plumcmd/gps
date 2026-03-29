@@ -273,21 +273,21 @@ const TrackerMap = forwardRef<TrackerMapRef>((props, ref) => {
 
   {showDev && (
     <div className="
-      absolute left-0 top-full mt-3
-      px-4 py-2
-      rounded-lg
-      text-sm font-bold
-      text-cyan-300
-      bg-black/70
-      backdrop-blur-xl
-      border border-cyan-400/40
-      shadow-[0_0_20px_rgba(0,255,255,0.6)]
-      animate-cyberPopup
-      pointer-events-none
-      tracking-widest
-      glitch
+  absolute left-8 top-7
+  px-4 py-2
+  rounded-lg
+  text-sm font-bold
+  text-green-300
+  bg-black/70
+  backdrop-blur-xl
+  border border-green-400/40
+  shadow-[0_0_25px_rgba(0,255,100,0.7)]
+  animate-cyberPopup
+  pointer-events-none
+  tracking-widest
+  glitch
     ">
-      Разработчик: Vladyslav Oliinyk
+      Developed by: Vladyslav Oliinyk
     </div>
   )}
 </div>
