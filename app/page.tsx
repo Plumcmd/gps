@@ -248,7 +248,7 @@ export default function Home() {
       </div>
 
       {/* Кнопки справа сверху */}
-      <div className="absolute top-6 right-6 z-[1100] flex flex-col gap-3">
+      <div className="absolute top-20 right-6 z-[1100] flex flex-col gap-3">
         <SettingsButton />
         <Button
           onClick={() => setShowNotifications(true)}
@@ -266,7 +266,7 @@ export default function Home() {
       {/* Диалог добавления устройства */}
       <Dialog open={showAdd} onOpenChange={setShowAdd}>
         <DialogContent className="bg-zinc-900 border border-white/10 text-white max-w-[92vw] md:max-w-md rounded-3xl z-[1200]">
-          <DialogHeader className="px-6 pt-6 pb-3">
+          <DialogHeader className="px-5 pt-5 pb-3">
             <DialogTitle className="text-2xl">Новое устройство</DialogTitle>
             <DialogDescription className="text-zinc-400 text-sm">
               Добавьте GPS-трекер по IMEI
@@ -309,9 +309,9 @@ export default function Home() {
             <Button 
               onClick={handleAdd} 
               disabled={!imei.trim()}
-              className="w-full h-12 bg-green-500 hover:bg-green-600 text-base font-medium rounded-2xl"
+              className="absolute bottom-2 left-1/2 -translate-x-1/2 z-[1000]"
             >
-              Добавить устройство
+              Добавить
             </Button>
           </div>
         </DialogContent>
@@ -324,7 +324,7 @@ export default function Home() {
     max-w-[92vw] md:max-w-lg 
     rounded-3xl z-[1200] 
     flex flex-col 
-    max-h-[92vh] 
+    max-h-[72vh] 
     overflow-hidden
   ">
     <DialogHeader>
@@ -404,7 +404,7 @@ export default function Home() {
                 </div>
               )}
               <div className="px-3 py-1 rounded-2xl bg-zinc-800 text-zinc-400">
-                🚗 {getSpeedText(device.speed)}
+                 Состояние: {getSpeedText(device.speed)}
               </div>
             </div>
 
@@ -455,7 +455,7 @@ export default function Home() {
 
       {/* Диалог уведомлений */}
       <Dialog open={showNotifications} onOpenChange={setShowNotifications}>
-        <DialogContent className="bg-zinc-900 border border-white/10 text-white max-w-[92vw] md:max-w-lg rounded-3xl z-[1200] flex flex-col max-h-[92vh]">
+        <DialogContent className="bg-zinc-900 border border-white/10 text-white max-w-[82vw] md:max-w-lg rounded-3xl z-[1200] flex flex-col max-h-[72vh]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Bell className="w-5 h-5" />
