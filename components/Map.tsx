@@ -61,6 +61,24 @@ const TrackerMap = forwardRef<TrackerMapRef>((props, ref) => {
     setTimeout(() => setShowDev(false), 3000)
   }
 
+  const fetchAddress = async (lat: number, lng: number, imei: string) => {
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`
+    )
+    const data = await res.json()
+
+    const address = data.display_name || 'Адрес не найден'
+
+    setAddresses(prev => ({
+      ...prev,
+      [imei]: address
+    }))
+  } catch (err) {
+    console.error('Ошибка геокодирования:', err)
+  }
+}
+
   // ====================== ЗАГРУЗКА УСТРОЙСТВ (оставляем как было) ======================
   const loadDevices = async () => {
     const { data } = await supabase.from('devices').select('*')
@@ -89,14 +107,14 @@ const TrackerMap = forwardRef<TrackerMapRef>((props, ref) => {
   const speed = Number(device.speed || 0)
   const voltage = Number(device.voltage || device.battery || 0)
 
-  let statusText = 'Неизвестно'
+  let statusText = 'НЕИЗВЕСТНО'
   let statusColor = 'bg-zinc-500/20 text-zinc-400 border-zinc-500/30'
 
   if (speed > 0) {
-    statusText = 'В движении'
+    statusText = 'В ДВИЖЕНИИ'
     statusColor = 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
   } else {
-    statusText = 'Стоит'
+    statusText = 'СТОИТ'
     statusColor = 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30'
   }
 
@@ -218,6 +236,17 @@ const TrackerMap = forwardRef<TrackerMapRef>((props, ref) => {
     }
   }))
 
+  useEffect(() => {
+  if (!selected) return
+
+  const lat = Number(selected.lat)
+  const lng = Number(selected.lng)
+
+  if (!addresses[selected.imei]) {
+    fetchAddress(lat, lng, selected.imei)
+  }
+}, [selected])
+
   return (
     
     <div className="h-screen w-full relative">
@@ -292,7 +321,6 @@ const TrackerMap = forwardRef<TrackerMapRef>((props, ref) => {
   )}
 </div>
 
-
       {/* Модальное окно */}
       <Dialog open={!!selected} onOpenChange={() => setSelected(null)}>
         <DialogContent className="bg-zinc-900 border border-white/10 text-white max-w-[92vw] md:max-w-md rounded-3xl z-[1300] p-0 overflow-hidden">
@@ -309,8 +337,10 @@ const TrackerMap = forwardRef<TrackerMapRef>((props, ref) => {
               <>
                 {/* Шапка */}
                 <div className="bg-gradient-to-r from-zinc-800 to-zinc-950 px-5 py-5 border-b border-white/10">
+                  Подробная информация:
                   <div className="flex items-center gap-3">
-                    <div className="min-w-0 flex-1">
+                    
+                    <div className="min-w-0 flex-1 ">
                      
                       <DialogTitle className="text-lg font-semibold leading-tight truncate">
                         {selected.name || 'Автомобиль'} 
@@ -345,7 +375,7 @@ const TrackerMap = forwardRef<TrackerMapRef>((props, ref) => {
                         {info.speed > 0 ? info.speed : '—'}
                         <span className="text-base text-zinc-500 ml-1">км/ч</span>
                       </div>
-                      {info.speed === 0 && <div className="text-xs text-emerald-400 mt-1">Не в движении</div>}
+                      {info.speed === 0 && <div className="text-xs text-emerald-400 mt-1">НЕ В ДВИЖЕНИИ</div>}
                     </div>
 
                     {/* Аккумулятор с технологичным дизайном */}

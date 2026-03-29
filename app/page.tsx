@@ -248,7 +248,7 @@ export default function Home() {
       </div>
 
       {/* Кнопки справа сверху */}
-      <div className="absolute top-20 right-6 z-[1100] flex flex-col gap-3">
+      <div className="absolute top-30 right-6 z-[1100] flex flex-col gap-3">
         <SettingsButton />
         <Button
           onClick={() => setShowNotifications(true)}
