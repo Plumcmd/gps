@@ -16,11 +16,10 @@ import {
 } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
-import { LocateFixed } from "lucide-react";
-
+import { LocateFixed } from "lucide-react"
 
 import { supabase } from '@/lib/supabase'
-import { Navigation, Battery, User } from 'lucide-react' // ← добавил User
+import { Battery } from 'lucide-react'
 import { Device } from "@/types/device"
 import {
   Dialog,
@@ -29,7 +28,7 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 
-// Фикс иконок Leaflet (оставляем как было)
+// Фикс иконок Leaflet
 delete (L as any).Icon.Default.prototype._getIconUrl
 L.Icon.Default.mergeOptions({ iconRetinaUrl: '', iconUrl: '', shadowUrl: '' })
 
@@ -38,6 +37,32 @@ const defaultCenter: [number, number] = [53.42894, 14.55302]
 interface TrackerMapRef {
   flyTo: (pos: [number, number], zoom?: number) => void
   drawRoute: (points: any[]) => void
+}
+
+// ====================== ДИНАМИЧЕСКАЯ ИКОНКА МАРКЕРА ======================
+const getMarkerIcon = (device: Device) => {
+  const speed = Number(device.speed || 0)
+  const isMoving = speed > 3
+
+  return L.divIcon({
+    className: '',
+    html: `
+      <div class="relative flex items-center justify-center">
+        <!-- Основной круг — всегда зелёный -->
+        <div class="w-4 h-4 bg-emerald-400 rounded-full 
+                    shadow-[0_0_30px_8px_rgba(16,185,129,0.8)] 
+                    ${isMoving ? 'animate-pulse' : ''}">
+        </div>
+        
+        <!-- Стрелка только когда едет -->
+        ${isMoving ? `
+          <div class="absolute text-white text-[11px] font-black rotate-45">→</div>
+        ` : ''}
+      </div>
+    `,
+    iconSize: [28, 28],
+    iconAnchor: [14, 14]
+  })
 }
 
 const TrackerMap = forwardRef<TrackerMapRef>((props, ref) => {
@@ -49,10 +74,10 @@ const TrackerMap = forwardRef<TrackerMapRef>((props, ref) => {
   const mapRef = useRef<L.Map | null>(null)
   const markersRef = useRef<Record<string, L.Marker>>({})
 
-  // === НОВОЕ: Моё местоположение ===
+  // === Моё местоположение ===
   const [userPosition, setUserPosition] = useState<[number, number] | null>(null)
   const userMarkerRef = useRef<L.Marker | null>(null)
-  const [isFollowing, setIsFollowing] = useState(false) // режим слежения
+  const [isFollowing, setIsFollowing] = useState(false)
 
   const [showDev, setShowDev] = useState(false)
 
@@ -62,24 +87,19 @@ const TrackerMap = forwardRef<TrackerMapRef>((props, ref) => {
   }
 
   const fetchAddress = async (lat: number, lng: number, imei: string) => {
-  try {
-    const res = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`
-    )
-    const data = await res.json()
-
-    const address = data.display_name || 'Адрес не найден'
-
-    setAddresses(prev => ({
-      ...prev,
-      [imei]: address
-    }))
-  } catch (err) {
-    console.error('Ошибка геокодирования:', err)
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`
+      )
+      const data = await res.json()
+      const address = data.display_name || 'Адрес не найден'
+      setAddresses(prev => ({ ...prev, [imei]: address }))
+    } catch (err) {
+      console.error('Ошибка геокодирования:', err)
+    }
   }
-}
 
-  // ====================== ЗАГРУЗКА УСТРОЙСТВ (оставляем как было) ======================
+  // ====================== ЗАГРУЗКА УСТРОЙСТВ ======================
   const loadDevices = async () => {
     const { data } = await supabase.from('devices').select('*')
     const valid = data?.filter(d =>
@@ -90,13 +110,29 @@ const TrackerMap = forwardRef<TrackerMapRef>((props, ref) => {
 
   const [theme, setTheme] = useState<'dark' | 'light'>('dark')
 
+  // ====================== ПЛАВНОЕ ДВИЖЕНИЕ МАРКЕРОВ ======================
+  useEffect(() => {
+    devices.forEach(device => {
+      const marker = markersRef.current[device.imei]
+      if (!marker) return
+
+      const lat = Number(device.lat)
+      const lng = Number(device.lng)
+
+      if (!isNaN(lat) && !isNaN(lng)) {
+        marker.setLatLng([lat, lng])   // ← ПЛАВНОЕ ПЕРЕМЕЩЕНИЕ
+      }
+    })
+  }, [devices])
+
+  // ====================== REALTIME ======================
   useEffect(() => {
     loadDevices()
 
     const channel = supabase
       .channel('devices-live-map')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'devices' }, (payload) => {
-        // ... (оставляем твой код без изменений)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'devices' }, () => {
+        loadDevices()
       })
       .subscribe()
 
@@ -104,99 +140,68 @@ const TrackerMap = forwardRef<TrackerMapRef>((props, ref) => {
   }, [])
 
   function getDeviceInfo(device: Device) {
-  const speed = Number(device.speed || 0)
-  const voltage = Number(device.voltage || device.battery || 0)
+    const speed = Number(device.speed || 0)
+    const voltage = Number(device.voltage || device.battery || 0)
 
-  let statusText = 'НЕИЗВЕСТНО'
-  let statusColor = 'bg-zinc-500/20 text-zinc-400 border-zinc-500/30'
+    let statusText = 'НЕИЗВЕСТНО'
+    let statusColor = 'bg-zinc-500/20 text-zinc-400 border-zinc-500/30'
 
-  if (speed > 0) {
-    statusText = 'В ДВИЖЕНИИ'
-    statusColor = 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
-  } else {
-    statusText = 'СТОИТ'
-    statusColor = 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30'
-  }
-
-  let batteryText = '—'
-  let batteryColor = 'text-zinc-400'
-
-  if (voltage) {
-    batteryText = `${voltage.toFixed(1)}V`
-
-    if (voltage >= 12.8) {
-      batteryColor = 'text-emerald-400'
-    } else if (voltage >= 12.2) {
-      batteryColor = 'text-yellow-400'
+    if (speed > 0) {
+      statusText = 'В ДВИЖЕНИИ'
+      statusColor = 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
     } else {
-      batteryColor = 'text-red-400'
+      statusText = 'СТОИТ'
+      statusColor = 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30'
     }
-  }
 
-  return {
-    speed,
-    voltage,
-    statusText,
-    statusColor,
-    batteryText,
-    batteryColor
+    let batteryText = '—'
+    let batteryColor = 'text-zinc-400'
+
+    if (voltage) {
+      batteryText = `${voltage.toFixed(1)}V`
+
+      if (voltage >= 12.8) batteryColor = 'text-emerald-400'
+      else if (voltage >= 12.2) batteryColor = 'text-yellow-400'
+      else batteryColor = 'text-red-400'
+    }
+
+    return { speed, voltage, statusText, statusColor, batteryText, batteryColor }
   }
-}
 
   // ====================== МОЁ МЕСТОПОЛОЖЕНИЕ ======================
   const locateUser = (follow = false) => {
     if (!mapRef.current) return
 
-    const options = {
-      enableHighAccuracy: true,
-      timeout: 10000,
-      maximumAge: 0,
-    }
+    const options = { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
 
     const onLocationFound = (e: L.LocationEvent) => {
       const pos: [number, number] = [e.latlng.lat, e.latlng.lng]
       setUserPosition(pos)
-
-      // Центрируем карту
       mapRef.current?.flyTo(pos, 16, { duration: 1.5 })
 
-      // Создаём или обновляем маркер
       if (!userMarkerRef.current) {
         const userIcon = L.divIcon({
           className: '',
-          html: `
-            <div class="relative flex items-center justify-center">
-              <div class="w-5 h-5 bg-blue-500 rounded-full shadow-[0_0_20px_8px_rgba(59,130,246,0.7)] animate-pulse"></div>
-              <div class="absolute text-white text-xl"></div>
-            </div>
-          `,
+          html: `<div class="relative flex items-center justify-center"><div class="w-4 h-4 bg-blue-500 rounded-full shadow-[0_0_20px_8px_rgba(59,130,246,0.7)] animate-pulse"></div></div>`,
           iconSize: [32, 32],
-          iconAnchor: [16, 16],
+          iconAnchor: [12, 12],
         })
-
         userMarkerRef.current = L.marker(pos, { icon: userIcon }).addTo(mapRef.current!)
-        
-        // Tooltip
         userMarkerRef.current.bindTooltip("Вы здесь", {
           permanent: true,
           direction: 'top',
           offset: [0, -20],
-          className: '!bg-blue-600 !text-white !px-3 !py-1 !rounded-xl !text-xs shadow-xl'
+          className: '!bg-blue-500 !text-white !px-3 !py-1 !rounded-xl !text-xs shadow-xl'
         })
       } else {
         userMarkerRef.current.setLatLng(pos)
       }
 
-      if (follow) {
-        setIsFollowing(true)
-        // Можно добавить circle радиуса точности
-         L.circle(pos, { radius: e.accuracy, color: '#daf63b', opacity: 0.2 }).addTo(mapRef.current!)
-      }
+      if (follow) setIsFollowing(true)
     }
 
     const onLocationError = (e: L.ErrorEvent) => {
       alert(`Не удалось определить местоположение: ${e.message}`)
-      console.error('Geolocation error:', e)
     }
 
     if (follow) {
@@ -209,78 +214,57 @@ const TrackerMap = forwardRef<TrackerMapRef>((props, ref) => {
     mapRef.current.on('locationerror', onLocationError)
   }
 
-  // Остановить слежение
   const stopFollowing = () => {
-    if (mapRef.current) {
-      mapRef.current.stopLocate()
-    }
+    if (mapRef.current) mapRef.current.stopLocate()
     setIsFollowing(false)
   }
 
-  // ====================== useImperativeHandle (добавляем flyTo если нужно) ======================
+  // ====================== IMPERATIVE HANDLE ======================
   useImperativeHandle(ref, () => ({
-    flyTo: (pos, zoom = 15) => {
-      mapRef.current?.flyTo(pos, zoom, { duration: 1.2 })
-    },
+    flyTo: (pos, zoom = 15) => mapRef.current?.flyTo(pos, zoom, { duration: 1.2 }),
     drawRoute: (points) => {
       const latlngs = points
         .filter(p => p.lat && p.lng)
         .map(p => [Number(p.lat), Number(p.lng)] as [number, number])
-
       setRoute(latlngs)
-
       if (mapRef.current && latlngs.length > 0) {
-        const bounds = L.latLngBounds(latlngs)
-        mapRef.current.fitBounds(bounds, { padding: [60, 60] })
+        mapRef.current.fitBounds(L.latLngBounds(latlngs), { padding: [60, 60] })
       }
     }
   }))
 
-  
-
+  // Адрес при открытии модалки
   useEffect(() => {
-  if (!selected) return
-
-  const lat = Number(selected.lat)
-  const lng = Number(selected.lng)
-
-  if (!addresses[selected.imei]) {
-    fetchAddress(lat, lng, selected.imei)
-  }
-}, [selected])
-
-// Добавь этот useEffect после существующих useEffect
-useEffect(() => {
-  const savedTheme = localStorage.getItem('theme') as 'dark' | 'light' | null;
-  
-  if (savedTheme) {
-    setTheme(savedTheme);
-    
-    if (savedTheme === 'light') {
-      document.documentElement.classList.remove('dark');
-    } else {
-      document.documentElement.classList.add('dark');
+    if (!selected) return
+    const lat = Number(selected.lat)
+    const lng = Number(selected.lng)
+    if (!addresses[selected.imei]) {
+      fetchAddress(lat, lng, selected.imei)
     }
-  } else {
-    // Если темы нет в localStorage — оставляем dark по умолчанию
-    document.documentElement.classList.add('dark');
-  }
-}, []);
+  }, [selected])
+
+  // Тема
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('theme') as 'dark' | 'light' | null
+    if (savedTheme) {
+      setTheme(savedTheme)
+      document.documentElement.classList.toggle('dark', savedTheme === 'dark')
+    } else {
+      document.documentElement.classList.add('dark')
+    }
+  }, [])
 
   return (
-    
     <div className="h-screen w-full relative">
-
-{/* Кнопка "Моё местоположение" */}
+      {/* Кнопка "Моё местоположение" */}
       <div className="absolute bottom-30 left-7 z-[1000] flex flex-col gap-2">
-<Button
-  onClick={() => locateUser(false)}
-  className="w-9 h-9 bg-zinc-900 border border-white/10 text-white rounded-3xl"
-  title="Моё местоположение"
->
-  <LocateFixed className="w-6 h-6" />
-</Button>
-
+        <Button
+          onClick={() => locateUser(false)}
+          className="w-9 h-9 bg-zinc-900 border border-white/10 text-white rounded-3xl"
+          title="Моё местоположение"
+        >
+          <LocateFixed className="w-6 h-6" />
+        </Button>
 
         {isFollowing && (
           <Button
@@ -293,65 +277,40 @@ useEffect(() => {
           </Button>
         )}
       </div>
-      
-{/* Переключатель темы с сохранением в localStorage */}
-<div className="absolute bottom-40 right-4 z-[1000]">
-  <button
-    onClick={() => {
-      const newTheme = theme === 'dark' ? 'light' : 'dark';
-      setTheme(newTheme);
-      localStorage.setItem('theme', newTheme);
-      
-      // Применяем тему к документу
-      if (newTheme === 'light') {
-        document.documentElement.classList.remove('dark');
-      } else {
-        document.documentElement.classList.add('dark');
-      }
-    }}
-    className={`ios-switch ${theme === 'light' ? 'active' : ''}`}
-    title="Переключить тему"
-  >
-    <span className="icon moon">☽</span>
-    <span className="icon sun">☼</span>
-    <span className="thumb" />
-  </button>
-</div>
 
-<div 
-  className="absolute left-4 top-1/2 -translate-y-1/2 z-[1000]"
-  onClick={handleDevClick}
->
-  <div className="
-    gps-text cursor-pointer select-none
-    text-cyan-300 font-semibold tracking-wider
-    drop-shadow-[0_0_6px_rgba(0,255,255,0.7)]
-    hover:drop-shadow-[0_0_12px_rgba(0,255,255,1)]
-    transition-all duration-300
-  ">
-    GPS Polska Flora
-  </div>
+      {/* Переключатель темы */}
+      <div className="absolute bottom-40 right-4 z-[1000]">
+        <button
+          onClick={() => {
+            const newTheme = theme === 'dark' ? 'light' : 'dark'
+            setTheme(newTheme)
+            localStorage.setItem('theme', newTheme)
+            document.documentElement.classList.toggle('dark', newTheme === 'dark')
+          }}
+          className={`ios-switch ${theme === 'light' ? 'active' : ''}`}
+          title="Переключить тему"
+        >
+          <span className="icon moon">☽</span>
+          <span className="icon sun">☼</span>
+          <span className="thumb" />
+        </button>
+      </div>
 
-  {showDev && (
-    <div className="
-  absolute left-8 top-7
-  px-4 py-2
-  rounded-lg
-  text-sm font-bold
-  text-green-300
-  bg-black/70
-  backdrop-blur-xl
-  border border-green-400/40
-  shadow-[0_0_25px_rgba(0,255,100,0.7)]
-  animate-cyberPopup
-  pointer-events-none
-  tracking-widest
-  glitch
-    ">
-      Developed by: Vladyslav Oliinyk
-    </div>
-  )}
-</div>
+      {/* Название проекта */}
+      <div
+        className="absolute left-4 top-1/2 -translate-y-1/2 z-[1000]"
+        onClick={handleDevClick}
+      >
+        <div className="gps-text cursor-pointer select-none text-cyan-300 font-semibold tracking-wider drop-shadow-[0_0_6px_rgba(0,255,255,0.7)] hover:drop-shadow-[0_0_12px_rgba(0,255,255,1)] transition-all duration-300">
+          GPS Polska Flora
+        </div>
+
+        {showDev && (
+          <div className="absolute left-8 top-7 px-4 py-2 rounded-lg text-sm font-bold text-green-300 bg-black/70 backdrop-blur-xl border border-green-400/40 shadow-[0_0_25px_rgba(0,255,100,0.7)] animate-cyberPopup pointer-events-none tracking-widest">
+            Developed by: Vladyslav Oliinyk
+          </div>
+        )}
+      </div>
 
       {/* Модальное окно */}
       <Dialog open={!!selected} onOpenChange={() => setSelected(null)}>
@@ -360,46 +319,35 @@ useEffect(() => {
             const info = getDeviceInfo(selected)
             const address = addresses[selected.imei] || 'Определяем адрес...'
 
-            // Вычисляем износ АКБ в %
             const batteryWear = info.voltage
               ? Math.max(0, Math.min(100, Math.round((12.8 - info.voltage) * 50)))
               : 0
 
             return (
               <>
-                {/* Шапка */}
                 <div className="bg-gradient-to-r from-zinc-800 to-zinc-950 px-5 py-5 border-b border-white/10">
                   Подробная информация:
                   <div className="flex items-center gap-3">
-                    
-                    <div className="min-w-0 flex-1 ">
-                     
+                    <div className="min-w-0 flex-1">
                       <DialogTitle className="text-lg font-semibold leading-tight truncate">
-                        {selected.name || 'Автомобиль'} 
+                        {selected.name || 'Автомобиль'}
                       </DialogTitle>
-                      
                       <p className="text-xs text-zinc-500 font-mono mt-0.5">{selected.imei}</p>
                     </div>
-                                             {/* Статус над именем */}
-
                   </div>
-                                            <div className={`text-[8px] px-3 py-1 rounded-full font-medium border ${info.statusColor} mb-1 inline-block mt-[10px]`}>
-  {info.statusText}
-</div> 
+                  <div className={`text-[8px] px-3 py-1 rounded-full font-medium border ${info.statusColor} mb-1 inline-block mt-[10px]`}>
+                    {info.statusText}
+                  </div>
                 </div>
 
                 <div className="p-5 space-y-5">
-                  
-                  {/* Адрес */}
                   <div>
-                    
                     <div className="text-xs text-zinc-500 mb-1.5">Местоположение:</div>
                     <div className="text-sm leading-snug bg-zinc-950 border border-white/10 p-3.5 rounded-2xl">
                       {address}
                     </div>
                   </div>
 
-                  {/* Скорость + Напряжение */}
                   <div className="grid grid-cols-2 gap-3">
                     <div className="bg-zinc-950 border border-white/10 rounded-2xl p-4">
                       <div className="text-xs text-zinc-500 mb-1">Скорость:</div>
@@ -410,7 +358,6 @@ useEffect(() => {
                       {info.speed === 0 && <div className="text-xs text-emerald-400 mt-1">НЕ В ДВИЖЕНИИ</div>}
                     </div>
 
-                    {/* Аккумулятор с технологичным дизайном */}
                     <div className="bg-zinc-950 border border-white/10 rounded-2xl p-4 space-y-2">
                       <div className="text-xs text-zinc-500 mb-1 flex items-center gap-1">
                         <Battery className="w-4 h-4" /> Аккумулятор:
@@ -419,58 +366,34 @@ useEffect(() => {
                         {info.batteryText}
                       </div>
 
-                      {/* Состояние и примечание */}
                       {info.voltage && (
                         <div className="space-y-1">
                           <div className="text-xs text-zinc-400 flex justify-between">
                             <span>
-                              {info.voltage >= 12.8 ? 'Отличное' :
-                               info.voltage >= 12.2 ? 'Хорошее' :
-                               'Низкое'}
+                              {info.voltage >= 12.8 ? 'Отличное' : info.voltage >= 12.2 ? 'Хорошее' : 'Низкое'}
                             </span>
                             <span className="font-mono">{batteryWear}%</span>
                           </div>
-
-                          {/* Прогресс-бар */}
                           <div className="w-full h-2 bg-zinc-800 rounded-full overflow-hidden">
                             <div
                               className={`h-2 rounded-full transition-all duration-500 ${
-                                info.voltage >= 12.8 ? 'bg-emerald-400' :
-                                info.voltage >= 12.2 ? 'bg-yellow-400' :
-                                'bg-red-500'
+                                info.voltage >= 12.8 ? 'bg-emerald-400' : info.voltage >= 12.2 ? 'bg-yellow-400' : 'bg-red-500'
                               }`}
                               style={{ width: `${batteryWear}%` }}
                             />
                           </div>
-
-                          {/* Примечание */}
-                          {info.voltage >= 12.8 ? null :
-                            info.voltage >= 12.2 ? (
-                              <div className="text-yellow-400 text-[10px] font-mono">
-                                ⚠️ Напряжение чуть ниже идеала — проверьте контакты и кабели.
-                              </div>
-                            ) : (
-                              <div className="text-red-400 text-[10px] font-mono">
-                                ❌ Напряжение низкое — возможно разряд или износ АКБ. Требуется обслуживание.
-                              </div>
-                            )
-                          }
                         </div>
                       )}
                     </div>
                   </div>
 
-                  {/* Кнопки */}
                   <div className="flex gap-3 pt-2">
                     <Button
-                      onClick={() => 
-                        window.open(`https://www.google.com/maps/dir/?api=1&destination=${selected.lat},${selected.lng}`, '_blank')
-                      }
+                      onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${selected.lat},${selected.lng}`, '_blank')}
                       className="flex-1 h-11 bg-white hover:bg-white/90 text-black rounded-2xl text-sm font-medium"
                     >
                       Маршрут в Google
                     </Button>
-
                     <Button
                       variant="outline"
                       onClick={() => setSelected(null)}
@@ -513,16 +436,7 @@ useEffect(() => {
               position={[lat, lng]}
               eventHandlers={{ click: () => setSelected(device) }}
               ref={el => { if (el) markersRef.current[device.imei] = el }}
-              icon={L.divIcon({
-                className: '',
-                html: `
-                  <div class="relative">
-                    <div class="w-5 h-5 bg-green-500 rounded-full shadow-[0_0_15px_6px_rgba(34,197,94,0.8)] animate-pulse"></div>
-                  </div>
-                `,
-                iconSize: [20, 20],
-                iconAnchor: [10, 10]
-              })}
+              icon={getMarkerIcon(device)}
             >
               <Tooltip
                 direction="top"
