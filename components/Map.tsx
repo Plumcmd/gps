@@ -236,6 +236,8 @@ const TrackerMap = forwardRef<TrackerMapRef>((props, ref) => {
     }
   }))
 
+  
+
   useEffect(() => {
   if (!selected) return
 
@@ -246,6 +248,24 @@ const TrackerMap = forwardRef<TrackerMapRef>((props, ref) => {
     fetchAddress(lat, lng, selected.imei)
   }
 }, [selected])
+
+// Добавь этот useEffect после существующих useEffect
+useEffect(() => {
+  const savedTheme = localStorage.getItem('theme') as 'dark' | 'light' | null;
+  
+  if (savedTheme) {
+    setTheme(savedTheme);
+    
+    if (savedTheme === 'light') {
+      document.documentElement.classList.remove('dark');
+    } else {
+      document.documentElement.classList.add('dark');
+    }
+  } else {
+    // Если темы нет в localStorage — оставляем dark по умолчанию
+    document.documentElement.classList.add('dark');
+  }
+}, []);
 
   return (
     
@@ -274,17 +294,29 @@ const TrackerMap = forwardRef<TrackerMapRef>((props, ref) => {
         )}
       </div>
       
-      {/* Переключатель темы */}
-      <div className="absolute bottom-40 right-4 z-[1000]">
-        <button
-          onClick={() => setTheme(prev => prev === 'dark' ? 'light' : 'dark')}
-          className={`ios-switch ${theme === 'light' ? 'active' : ''}`}
-        >
-          <span className="icon moon">☽</span>
-          <span className="icon sun">☼</span>
-          <span className="thumb" />
-        </button>
-      </div>
+{/* Переключатель темы с сохранением в localStorage */}
+<div className="absolute bottom-40 right-4 z-[1000]">
+  <button
+    onClick={() => {
+      const newTheme = theme === 'dark' ? 'light' : 'dark';
+      setTheme(newTheme);
+      localStorage.setItem('theme', newTheme);
+      
+      // Применяем тему к документу
+      if (newTheme === 'light') {
+        document.documentElement.classList.remove('dark');
+      } else {
+        document.documentElement.classList.add('dark');
+      }
+    }}
+    className={`ios-switch ${theme === 'light' ? 'active' : ''}`}
+    title="Переключить тему"
+  >
+    <span className="icon moon">☽</span>
+    <span className="icon sun">☼</span>
+    <span className="thumb" />
+  </button>
+</div>
 
 <div 
   className="absolute left-4 top-1/2 -translate-y-1/2 z-[1000]"

@@ -3,9 +3,16 @@
 
 import { supabase } from '@/lib/supabase'
 import { revalidatePath } from 'next/cache'
+import { encrypt, decrypt } from '@/lib/encryption'
 
 // ====================== ЛОГИН ======================
-async function loginWithDeviceCredentials(baseUrl: string, imei: string, password: string): Promise<string> {
+async function loginWithDeviceCredentials(
+  baseUrl: string, 
+  imei: string, 
+  encryptedPassword: string
+): Promise<string> {
+  const password = await decrypt(encryptedPassword)   // расшифровываем
+
   const url = `${baseUrl}/user/login.do?name=${encodeURIComponent(imei)}&password=${encodeURIComponent(password.trim())}`
   
   const res = await fetch(url, { 
@@ -36,12 +43,18 @@ export async function addDevice(imei: string, name: string, password: string) {
   const cleanName = name.trim() || 'Без названия'
   const finalPassword = password.trim() || cleanImei.slice(-6)
 
-  await supabase.from('devices').upsert({
+  const encryptedPassword = await encrypt(finalPassword)   // ← шифруем
+
+  const { error } = await supabase.from('devices').upsert({
     imei: cleanImei,
     name: cleanName,
-    password: finalPassword,
+    encrypted_password: encryptedPassword,        // ← зашифрованный пароль
     base_url: 'https://www.whatsgps.com',
   }, { onConflict: 'imei' })
+
+  if (error) {
+    throw new Error(`Ошибка при добавлении устройства: ${error.message}`)
+  }
 
   await fetchDevicePosition(cleanImei).catch(() => {})
   revalidatePath('/')
@@ -49,11 +62,19 @@ export async function addDevice(imei: string, name: string, password: string) {
 
 // ====================== ОБНОВЛЕНИЕ ВСЕХ ======================
 export async function updateAllDevices() {
-  const { data: devices } = await supabase.from('devices').select('imei, password, base_url')
+  const { data: devices, error } = await supabase
+    .from('devices')
+    .select('imei, encrypted_password')
+
+  if (error) {
+    console.error('[UPDATE ALL DEVICES] DB error:', error.message)
+    return
+  }
+
   if (!devices?.length) return
 
   for (const dev of devices) {
-    if (dev.password) {
+    if (dev.encrypted_password) {
       await fetchDevicePosition(dev.imei).catch(() => {})
     }
   }
@@ -63,15 +84,36 @@ export async function updateAllDevices() {
 // ====================== ТЕКУЩАЯ ПОЗИЦИЯ ======================
 export async function fetchDevicePosition(imei: string) {
   try {
-    const { data: device } = await supabase.from('devices').select('password, base_url').eq('imei', imei).single()
-    if (!device?.password) return
+    const { data: device, error } = await supabase
+      .from('devices')
+      .select('encrypted_password, base_url, name')
+      .eq('imei', imei)
+      .single()
+
+    if (error) {
+      console.error(`[DB FETCH ERROR] ${imei}:`, error.message)
+      return
+    }
+
+    if (!device?.encrypted_password) {
+      console.warn(`[NO PASSWORD] for IMEI ${imei}`)
+      return
+    }
 
     const baseUrl = device.base_url || 'https://www.whatsgps.com'
-    const token = await loginWithDeviceCredentials(baseUrl, imei, device.password)
 
-    const res = await fetch(`${baseUrl}/car/getByImei.do?token=${encodeURIComponent(token)}&imei=${encodeURIComponent(imei)}`, { 
-      cache: 'no-store' 
-    })
+    let token: string
+    try {
+      token = await loginWithDeviceCredentials(baseUrl, imei, device.encrypted_password)
+    } catch (loginErr: any) {
+      console.error(`[LOGIN FAILED] ${imei}:`, loginErr.message)
+      return
+    }
+
+    const res = await fetch(
+      `${baseUrl}/car/getByImei.do?token=${encodeURIComponent(token)}&imei=${encodeURIComponent(imei)}`,
+      { cache: 'no-store' }
+    )
 
     if (!res.ok) {
       console.error(`[FETCH ERROR] HTTP ${res.status} for IMEI ${imei}`)
@@ -86,14 +128,14 @@ export async function fetchDevicePosition(imei: string) {
       return
     }
 
-    // === ПАРСИНГ НАПРЯЖЕНИЯ ИЗ exData ===
+    // === ПАРСИНГ НАПРЯЖЕНИЯ ===
     let voltage: number | null = null
     if (car.exData) {
       const match = car.exData.match(/v=(\d+)/)
       if (match && match[1]) {
         const mv = parseInt(match[1], 10)
-        voltage = mv / 1000 // переводим из mV в V (например 13000 → 13.0)
-        console.log(`[VOLTAGE PARSED] ${imei} → ${voltage}V (raw: ${mv}mV from exData)`)
+        voltage = mv / 1000
+        console.log(`[VOLTAGE PARSED] ${imei} → ${voltage}V`)
       }
     }
 
@@ -109,21 +151,19 @@ export async function fetchDevicePosition(imei: string) {
       gps_time: gpsTime,
     }
 
-    console.log(`[UPDATING DB] ${imei} → voltage=${voltage}V, speed=${speed}`)
-
-    const { error } = await supabase
+    const { error: updateError } = await supabase
       .from('devices')
       .update(updateData)
       .eq('imei', imei)
 
-    if (error) {
-      console.error(`[DB UPDATE ERROR] ${imei}:`, error)
+    if (updateError) {
+      console.error(`[DB UPDATE ERROR] ${imei}:`, updateError)
     } else {
       console.log(`[SUCCESS] Position updated for ${imei}`)
     }
 
-  } catch (err) {
-    console.error(`[POSITION ERROR] ${imei}:`, err)
+  } catch (err: any) {
+    console.error(`[POSITION ERROR] ${imei}:`, err.message || err)
   }
 }
 
@@ -132,13 +172,18 @@ export async function fetchTodayHistory(imei: string) {
   try {
     console.log(`[HISTORY START] IMEI: ${imei}`)
 
-    const { data: device } = await supabase.from('devices').select('password, base_url').eq('imei', imei).single()
-    if (!device?.password) {
+    const { data: device, error } = await supabase
+      .from('devices')
+      .select('encrypted_password, base_url')
+      .eq('imei', imei)
+      .single()
+
+    if (error || !device?.encrypted_password) {
       throw new Error('Пароль устройства не найден')
     }
 
     const baseUrl = device.base_url || 'https://www.whatsgps.com'
-    const token = await loginWithDeviceCredentials(baseUrl, imei, device.password)
+    const token = await loginWithDeviceCredentials(baseUrl, imei, device.encrypted_password)
 
     const now = new Date()
     const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000)
@@ -163,10 +208,10 @@ export async function fetchTodayHistory(imei: string) {
     console.log(`[HISTORY RESPONSE] ret=${json.ret}, data items=${json.data?.length || 0}`)
 
     if (json.ret !== 1) {
-      const msg = json.msg || '';
+      const msg = json.msg || ''
       
       if (msg.includes('车辆不存在') || msg.includes('vehicle not exist') || msg.includes('not exist')) {
-        throw new Error('На данный момент нельзя отследить трек, функция находится в разработке.');
+        throw new Error('На данный момент нельзя отследить трек, функция находится в разработке.')
       }
       
       throw new Error(msg || `API error ret=${json.ret}`)
