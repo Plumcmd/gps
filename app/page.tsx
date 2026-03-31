@@ -51,6 +51,8 @@ export default function Home() {
   const mapRef = useRef<any>(null)
   const prevStates = useRef<Record<string, { online: boolean; moving: boolean }>>({})
 
+  const [timeLeft, setTimeLeft] = useState(10)
+
   // ====================== ПОМОЩНИКИ ======================
   const calculateMinutesAgo = (lastUpdated?: string | null) => {
     if (!lastUpdated) return 9999
@@ -113,6 +115,7 @@ export default function Home() {
     const interval = setInterval(async () => {
       await updateAllDevices()
       await loadDevices()
+      setTimeLeft(10)
     }, 10000)
 
     return () => clearInterval(interval)
@@ -165,7 +168,7 @@ export default function Home() {
   const handleAdd = async () => {
     try {
       await addDevice(imei, name, devicePassword)
-      toast.success('✅ Устройство добавлено')
+      toast.success('Устройство добавлено')
       setShowAdd(false)
       setImei('')
       setName('')
@@ -210,6 +213,18 @@ export default function Home() {
     }
   }
 
+  // ====================== ТАЙМЕР ОБНОВЛЕНИЯ ======================
+useEffect(() => {
+  const timer = setInterval(() => {
+    setTimeLeft((prev) => {
+      if (prev <= 1) return 10
+      return prev - 1
+    })
+  }, 1000)
+
+  return () => clearInterval(timer)
+}, [])
+
   return (
     <div className="min-h-screen bg-black text-white overflow-hidden relative pb-safe">
       <div className="absolute inset-0">
@@ -226,26 +241,62 @@ export default function Home() {
         </Button>
       </div>
 
-      {/* Кнопки справа снизу */}
-      <div className="absolute bottom-6 right-5 z-[1100] flex flex-col gap-3">
-        <Button
-          onClick={async () => {
-            await updateAllDevices()
-            await loadDevices()
-            toast.success('Обновлено')
-          }}
-          className="w-12 h-12 bg-zinc-900/90 hover:bg-zinc-800 border border-white/20 rounded-3xl flex items-center justify-center"
-        >
-          <RefreshCw className="w-7 h-7" />
-        </Button>
+{/* Кнопки справа снизу */}
+<div className="absolute bottom-8 right-6 z-[1100] flex flex-col items-end gap-3">
 
-        <Button
-          onClick={() => setShowList(true)}
-          className="w-12 h-12 bg-zinc-900/90 hover:bg-zinc-800 border border-white/20 rounded-3xl flex items-center justify-center"
-        >
-          <List className="w-7 h-7" />
-        </Button>
-      </div>
+  {/* === ТАЙМЕР + КНОПКА ОБНОВЛЕНИЯ (таймер слева) === */}
+  <div className="flex items-center gap-3">
+
+    {/* Круговой таймер — простой, без фона и рамок */}
+    <div className="relative w-8 h-8 flex items-center justify-center">
+      <svg className="w-8 h-8 -rotate-90" viewBox="0 0 36 36">
+        {/* Серый круг */}
+        <path
+          d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+          fill="none"
+          stroke="#3f3f46"
+          strokeWidth="3.2"
+        />
+        {/* Прогресс */}
+        <path
+          d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+          fill="none"
+          stroke="hsl(142, 69%, 58%)"
+          strokeWidth="3.2"
+          strokeDasharray={`${(timeLeft / 10) * 100}, 100`}
+          strokeLinecap="round"
+        />
+      </svg>
+
+      {/* Цифра */}
+      <span className="absolute text-[10px] font-mono font-semibold text-green-400">
+        {timeLeft}
+      </span>
+    </div>
+
+    {/* Кнопка обновления */}
+    <Button
+      onClick={async () => {
+        await updateAllDevices()
+        await loadDevices()
+        setTimeLeft(10)
+        toast.success('Обновлено')
+      }}
+      className="w-8 h-8 bg-zinc-900/90 hover:bg-zinc-800 border border-white/20 rounded-3xl flex items-center justify-center"
+    >
+      <RefreshCw className="w-8 h-8" />
+    </Button>
+  </div>
+
+  {/* Кнопка списка устройств */}
+  <Button
+    onClick={() => setShowList(true)}
+    className="w-8 h-15 bg-zinc-900/90 hover:bg-zinc-800 border border-white/20 rounded-3xl flex items-center justify-center"
+  >
+    <List className="w-7 h-7" />
+  </Button>
+</div>
+
 
       {/* Кнопки справа сверху */}
       <div className="absolute top-30 right-6 z-[1100] flex flex-col gap-3">

@@ -139,34 +139,96 @@ const TrackerMap = forwardRef<TrackerMapRef>((props, ref) => {
     return () => { void supabase.removeChannel(channel) }
   }, [])
 
-  function getDeviceInfo(device: Device) {
-    const speed = Number(device.speed || 0)
-    const voltage = Number(device.voltage || device.battery || 0)
+// ====================== ДИНАМИЧЕСКИЙ ТУЛТИП (компактный + скорость всегда) ======================
+useEffect(() => {
+  devices.forEach((device) => {
+    const marker = markersRef.current[device.imei]
+    if (!marker) return
 
-    let statusText = 'НЕИЗВЕСТНО'
-    let statusColor = 'bg-zinc-500/20 text-zinc-400 border-zinc-500/30'
+    const info = getDeviceInfo(device)
+    const name = device.name || device.imei.slice(-6)
 
-    if (speed > 0) {
-      statusText = 'В ДВИЖЕНИИ'
-      statusColor = 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+    const tooltipHTML = `
+      <div style="text-align:center; line-height:1.15; min-width:105px; padding:2px 0;">
+        <strong style="font-size:13px; color:#fff;">${name}</strong><br>
+        
+        <span style="font-size:11.5px; font-weight:700; color:${info.tooltipStatusColor};">
+          ${info.statusText}
+        </span>
+        
+        <span style="font-size:11.5px; margin-left:7px; color:#4ade80; font-weight:600;">
+          ${info.speed} км/ч
+        </span>
+        
+        ${info.batteryText !== '—' ? 
+          `<div style="margin-top:3px; font-size:10.5px; color:${info.tooltipBatteryColor};">
+            ${info.batteryText}
+          </div>` : ''}
+      </div>
+    `
+
+    const existingTooltip = marker.getTooltip()
+    if (existingTooltip) {
+      existingTooltip.setContent(tooltipHTML)
     } else {
-      statusText = 'СТОИТ'
-      statusColor = 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30'
+      marker.bindTooltip(tooltipHTML, {
+        permanent: true,
+        direction: 'top',
+        offset: [0, -15],
+        className: '!bg-zinc-950/95 !text-white !px-3 !py-1 !rounded-3xl !text-sm !border !border-white/20 shadow-2xl backdrop-blur-md'
+      }).openTooltip()
     }
+  })
+}, [devices])
 
-    let batteryText = '—'
-    let batteryColor = 'text-zinc-400'
+function getDeviceInfo(device: Device) {
+  const speed = Number(device.speed || 0)
+  const voltage = Number(device.voltage || device.battery || 0)
 
-    if (voltage) {
-      batteryText = `${voltage.toFixed(1)}V`
+  // Для модалки (старые Tailwind-классы)
+  let statusText = 'НЕИЗВЕСТНО'
+  let statusColor = 'bg-zinc-500/20 text-zinc-400 border-zinc-500/30'
 
-      if (voltage >= 12.8) batteryColor = 'text-emerald-400'
-      else if (voltage >= 12.2) batteryColor = 'text-yellow-400'
-      else batteryColor = 'text-red-400'
-    }
-
-    return { speed, voltage, statusText, statusColor, batteryText, batteryColor }
+  if (speed > 0) {
+    statusText = 'В ДВИЖЕНИИ'
+    statusColor = 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+  } else {
+    statusText = 'СТОИТ'
+    statusColor = 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30'
   }
+
+  let batteryText = '—'
+  let batteryColor = 'text-zinc-400'
+
+  if (voltage) {
+    batteryText = `${voltage.toFixed(1)}V`
+
+    if (voltage >= 12.8) batteryColor = 'text-emerald-400'
+    else if (voltage >= 12.2) batteryColor = 'text-yellow-400'
+    else batteryColor = 'text-red-400'
+  }
+
+  // Для тултипа (hex-цвета)
+  const tooltipStatusColor = speed > 0 ? '#4ade80' : '#eab308'
+  const tooltipBatteryColor = voltage
+    ? voltage >= 12.8
+      ? '#4ade80'
+      : voltage >= 12.2
+        ? '#eab308'
+        : '#f43f5e'
+    : '#a1a1aa'
+
+  return {
+    speed,
+    voltage,           // нужно для модалки (batteryWear)
+    statusText,
+    statusColor,       // Tailwind для модалки
+    batteryText,
+    batteryColor,      // Tailwind для модалки
+    tooltipStatusColor,
+    tooltipBatteryColor
+  }
+}
 
   // ====================== МОЁ МЕСТОПОЛОЖЕНИЕ ======================
   const locateUser = (follow = false) => {
@@ -256,11 +318,12 @@ const TrackerMap = forwardRef<TrackerMapRef>((props, ref) => {
 
   return (
     <div className="h-screen w-full relative">
+
       {/* Кнопка "Моё местоположение" */}
-      <div className="absolute bottom-30 left-7 z-[1000] flex flex-col gap-2">
+      <div className="absolute bottom-37 right-6 z-[1000] flex flex-col gap-2">
         <Button
           onClick={() => locateUser(false)}
-          className="w-9 h-9 bg-zinc-900 border border-white/10 text-white rounded-3xl"
+          className="w-8 h-8 bg-zinc-800 border border-white/10 text-white rounded-3xl"
           title="Моё местоположение"
         >
           <LocateFixed className="w-6 h-6" />
@@ -277,9 +340,8 @@ const TrackerMap = forwardRef<TrackerMapRef>((props, ref) => {
           </Button>
         )}
       </div>
-
-      {/* Переключатель темы */}
-      <div className="absolute bottom-40 right-4 z-[1000]">
+{/* Переключатель темы */}
+      <div className="absolute bottom-12 right-14 z-[1150] rotate-270">
         <button
           onClick={() => {
             const newTheme = theme === 'dark' ? 'light' : 'dark'
@@ -296,18 +358,19 @@ const TrackerMap = forwardRef<TrackerMapRef>((props, ref) => {
         </button>
       </div>
 
+
       {/* Название проекта */}
       <div
         className="absolute left-4 top-1/2 -translate-y-1/2 z-[1000]"
         onClick={handleDevClick}
       >
-        <div className="gps-text cursor-pointer select-none text-cyan-300 font-semibold tracking-wider drop-shadow-[0_0_6px_rgba(0,255,255,0.7)] hover:drop-shadow-[0_0_12px_rgba(0,255,255,1)] transition-all duration-300">
-          GPS Polska Flora
+        <div className="gps-text cursor-pointer select-none text-cyan-200 font-semibold tracking-wider drop-shadow-[0_0_6px_rgba(0,255,255,0.7)] hover:drop-shadow-[0_0_12px_rgba(0,255,255,1)] transition-all duration-300">
+          <b>GPS Horizon</b>
         </div>
 
         {showDev && (
           <div className="absolute left-8 top-7 px-4 py-2 rounded-lg text-sm font-bold text-green-300 bg-black/70 backdrop-blur-xl border border-green-400/40 shadow-[0_0_25px_rgba(0,255,100,0.7)] animate-cyberPopup pointer-events-none tracking-widest">
-            Developed by: Vladyslav Oliinyk
+            Developed by: <ul>Plum Studio</ul>
           </div>
         )}
       </div>
@@ -438,14 +501,6 @@ const TrackerMap = forwardRef<TrackerMapRef>((props, ref) => {
               ref={el => { if (el) markersRef.current[device.imei] = el }}
               icon={getMarkerIcon(device)}
             >
-              <Tooltip
-                direction="top"
-                offset={[0, -12]}
-                permanent
-                className="!bg-black/90 !text-white !px-3 !py-1 !rounded-xl !text-sm !border !border-white/20 shadow-2xl"
-              >
-                {device.name || device.imei.slice(-6)}
-              </Tooltip>
             </Marker>
           )
         })}
