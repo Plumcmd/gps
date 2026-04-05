@@ -10,4 +10,5 @@ export interface Device {
   gps_time?: string
   [key: string]: any
   encrypted_password?: string   // или password, если не переименовывал
+  user_id?: string
 }

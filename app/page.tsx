@@ -15,7 +15,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
-import { Plus, RefreshCw, List, Pencil, Trash2, Route, Bell } from 'lucide-react'
+import { Plus, RefreshCw, List, Pencil, Trash2, Route, Bell, LogOut } from 'lucide-react'
 
 import { addDevice, updateAllDevices, fetchTodayHistory } from './actions'
 import { supabase } from '@/lib/supabase'
@@ -23,6 +23,7 @@ import { Device } from "@/types/device"
 import { toast } from 'sonner'
 
 import SettingsButton from '@/components/SettingsButton'
+import AuthModal from '@/components/AuthModal'
 
 type Notification = {
   id: string
@@ -33,6 +34,11 @@ type Notification = {
 }
 
 export default function Home() {
+  // ====================== AUTH ======================
+  const [user, setUser] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+
+  // ====================== UI STATES ======================
   const [showAdd, setShowAdd] = useState(false)
   const [showList, setShowList] = useState(false)
   const [showNotifications, setShowNotifications] = useState(false)
@@ -53,7 +59,7 @@ export default function Home() {
 
   const [timeLeft, setTimeLeft] = useState(10)
 
-  // ====================== ПОМОЩНИКИ ======================
+  // ====================== HELPERS ======================
   const calculateMinutesAgo = (lastUpdated?: string | null) => {
     if (!lastUpdated) return 9999
     return (Date.now() - new Date(lastUpdated).getTime()) / 1000 / 60
@@ -65,13 +71,7 @@ export default function Home() {
   }
 
   const addNotification = (title: string, message: string, type: 'success' | 'error' | 'warning') => {
-    const notif: Notification = {
-      id: Date.now().toString(),
-      title,
-      message,
-      type,
-      time: new Date(),
-    }
+    const notif: Notification = { id: Date.now().toString(), title, message, type, time: new Date() }
     setNotifications(prev => [notif, ...prev].slice(0, 20))
 
     if (type === 'success') toast.success(`${title} — ${message}`)
@@ -79,7 +79,23 @@ export default function Home() {
     else toast(`${title} — ${message}`)
   }
 
-  // ====================== АДРЕС ======================
+  // ====================== AUTH ======================
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null)
+      setLoading(false)
+    })
+
+    const { data: listener } = supabase.auth.onAuthStateChange((_, session) => {
+      setUser(session?.user ?? null)
+    })
+
+    return () => listener.subscription.unsubscribe()
+  }, [])
+
+  const signOut = async () => await supabase.auth.signOut()
+
+  // ====================== DATA ======================
   const getAddress = async (lat: number, lng: number): Promise<string> => {
     const cacheKey = `${lat.toFixed(5)},${lng.toFixed(5)}`
     if (addresses[cacheKey]) return addresses[cacheKey]
@@ -97,19 +113,19 @@ export default function Home() {
   }
 
   const loadDevices = async () => {
+    if (!user) return
     const { data } = await supabase.from('devices').select('*')
     const devList = data || []
     setDevices(devList)
 
     for (const d of devList) {
-      if (d.lat && d.lng) {
-        getAddress(Number(d.lat), Number(d.lng))
-      }
+      if (d.lat && d.lng) getAddress(Number(d.lat), Number(d.lng))
     }
   }
 
-  // ====================== ИНТЕРВАЛ ОБНОВЛЕНИЯ ======================
+  // Интервал обновления
   useEffect(() => {
+    if (!user) return
     loadDevices()
 
     const interval = setInterval(async () => {
@@ -119,10 +135,18 @@ export default function Home() {
     }, 10000)
 
     return () => clearInterval(interval)
+  }, [user])
+
+  // Таймер
+  useEffect(() => {
+    const timer = setInterval(() => setTimeLeft(p => p <= 1 ? 10 : p - 1), 1000)
+    return () => clearInterval(timer)
   }, [])
 
-  // ====================== REALTIME УВЕДОМЛЕНИЯ ======================
+  // Realtime уведомления
   useEffect(() => {
+    if (!user) return
+
     const channel = supabase
       .channel('devices-live')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'devices' }, (payload) => {
@@ -142,19 +166,11 @@ export default function Home() {
         const deviceName = newDev.name || imei.slice(-6)
 
         if (isOnline !== prev.online) {
-          addNotification(
-            `${deviceName} ${isOnline ? 'онлайн' : 'оффлайн'}`,
-            isOnline ? 'Трекер подключился к сети' : 'Связь с трекером потеряна',
-            isOnline ? 'success' : 'error'
-          )
+          addNotification(`${deviceName} ${isOnline ? 'онлайн' : 'оффлайн'}`, isOnline ? 'Трекер подключился к сети' : 'Связь с трекером потеряна', isOnline ? 'success' : 'error')
         }
 
         if (isMoving !== prev.moving) {
-          addNotification(
-            `${deviceName} ${isMoving ? 'поехал' : 'остановился'}`,
-            isMoving ? `Скорость ${speed} км/ч` : 'Автомобиль стоит',
-            isMoving ? 'success' : 'warning'
-          )
+          addNotification(`${deviceName} ${isMoving ? 'поехал' : 'остановился'}`, isMoving ? `Скорость ${speed} км/ч` : 'Автомобиль стоит', isMoving ? 'success' : 'warning')
         }
 
         prevStates.current[imei] = { online: isOnline, moving: isMoving }
@@ -162,17 +178,15 @@ export default function Home() {
       .subscribe()
 
     return () => void supabase.removeChannel(channel)
-  }, [])
+  }, [user])
 
-  // ====================== ОБРАБОТЧИКИ ======================
+  // ====================== HANDLERS ======================
   const handleAdd = async () => {
     try {
       await addDevice(imei, name, devicePassword)
       toast.success('Устройство добавлено')
       setShowAdd(false)
-      setImei('')
-      setName('')
-      setDevicePassword('')
+      setImei(''); setName(''); setDevicePassword('')
       loadDevices()
     } catch (e: any) {
       toast.error(e.message)
@@ -193,19 +207,14 @@ export default function Home() {
   }
 
   const handleDeviceClick = (device: Device) => {
-    if (device.lat && device.lng) {
-      mapRef.current?.flyTo([Number(device.lat), Number(device.lng)], 16)
-    }
+    if (device.lat && device.lng) mapRef.current?.flyTo([Number(device.lat), Number(device.lng)], 16)
     setShowList(false)
   }
 
   const loadHistory = async (imei: string) => {
     try {
       const points = await fetchTodayHistory(imei)
-      if (points.length === 0) {
-        toast.info('За сегодня данных трека нет')
-        return
-      }
+      if (points.length === 0) return toast.info('За сегодня данных трека нет')
       mapRef.current?.drawRoute(points)
       toast.success(`Загружено ${points.length} точек`)
     } catch (e: any) {
@@ -213,106 +222,58 @@ export default function Home() {
     }
   }
 
-  // ====================== ТАЙМЕР ОБНОВЛЕНИЯ ======================
-useEffect(() => {
-  const timer = setInterval(() => {
-    setTimeLeft((prev) => {
-      if (prev <= 1) return 10
-      return prev - 1
-    })
-  }, 1000)
-
-  return () => clearInterval(timer)
-}, [])
+  // ====================== RENDER ======================
+  if (loading) return <div className="min-h-screen bg-black flex items-center justify-center text-white">Загрузка...</div>
 
   return (
     <div className="min-h-screen bg-black text-white overflow-hidden relative pb-safe">
-      <div className="absolute inset-0">
-        <TrackerMap ref={mapRef} />
-      </div>
+      {!user && <AuthModal />}
 
-      {/* Кнопка добавления */}
-      <div className="absolute bottom-6 left-4 z-[1100]">
-        <Button
-          onClick={() => setShowAdd(true)}
-          className="w-16 h-16 bg-green-500 hover:bg-green-400 shadow-2xl shadow-green-500/50 rounded-3xl text-black text-4xl flex items-center justify-center active:scale-95 transition-all"
-        >
-          <Plus className="w-9 h-9" />
-        </Button>
-      </div>
+      {!user && <div className="absolute inset-0 bg-black/90 z-[9998]" />}
 
-{/* Кнопки справа снизу */}
-<div className="absolute bottom-8 right-6 z-[1100] flex flex-col items-end gap-3">
-
-  {/* === ТАЙМЕР + КНОПКА ОБНОВЛЕНИЯ (таймер слева) === */}
-  <div className="flex items-center gap-3">
-
-    {/* Круговой таймер — простой, без фона и рамок */}
-    <div className="relative w-8 h-8 flex items-center justify-center">
-      <svg className="w-8 h-8 -rotate-90" viewBox="0 0 36 36">
-        {/* Серый круг */}
-        <path
-          d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-          fill="none"
-          stroke="#3f3f46"
-          strokeWidth="3.2"
-        />
-        {/* Прогресс */}
-        <path
-          d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-          fill="none"
-          stroke="hsl(142, 69%, 58%)"
-          strokeWidth="3.2"
-          strokeDasharray={`${(timeLeft / 10) * 100}, 100`}
-          strokeLinecap="round"
-        />
-      </svg>
-
-      {/* Цифра */}
-      <span className="absolute text-[10px] font-mono font-semibold text-green-400">
-        {timeLeft}
-      </span>
+{user && (
+  <>
+    <div className="absolute inset-0">
+      <TrackerMap ref={mapRef} />
     </div>
 
-    {/* Кнопка обновления */}
-    <Button
-      onClick={async () => {
-        await updateAllDevices()
-        await loadDevices()
-        setTimeLeft(10)
-        toast.success('Обновлено')
-      }}
-      className="w-8 h-8 bg-zinc-900/90 hover:bg-zinc-800 border border-white/20 rounded-3xl flex items-center justify-center"
-    >
-      <RefreshCw className="w-8 h-8" />
-    </Button>
-  </div>
+          {/* Кнопка добавления */}
+          <div className="absolute bottom-6 left-4 z-[1100]">
+            <Button onClick={() => setShowAdd(true)} className="w-16 h-16 bg-green-500 hover:bg-green-400 shadow-2xl shadow-green-500/50 rounded-3xl text-black text-4xl flex items-center justify-center active:scale-95 transition-all">
+              <Plus className="w-9 h-9" />
+            </Button>
+          </div>
 
-  {/* Кнопка списка устройств */}
-  <Button
-    onClick={() => setShowList(true)}
-    className="w-8 h-15 bg-zinc-900/90 hover:bg-zinc-800 border border-white/20 rounded-3xl flex items-center justify-center"
-  >
-    <List className="w-7 h-7" />
-  </Button>
-</div>
+          {/* Кнопки справа снизу */}
+          <div className="absolute bottom-8 right-6 z-[1100] flex flex-col items-end gap-3">
+            <div className="flex items-center gap-3">
+              <div className="relative w-8 h-8 flex items-center justify-center">
+                <svg className="w-8 h-8 -rotate-90" viewBox="0 0 36 36">
+                  <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#3f3f46" strokeWidth="3.2" />
+                  <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="hsl(142, 69%, 58%)" strokeWidth="3.2" strokeDasharray={`${(timeLeft / 10) * 100}, 100`} strokeLinecap="round" />
+                </svg>
+                <span className="absolute text-[10px] font-mono font-semibold text-green-400">{timeLeft}</span>
+              </div>
+              <Button onClick={async () => { await updateAllDevices(); await loadDevices(); setTimeLeft(10); toast.success('Обновлено') }} className="w-8 h-8 bg-zinc-900/90 hover:bg-zinc-800 border border-white/20 rounded-3xl flex items-center justify-center">
+                <RefreshCw className="w-5 h-5" />
+              </Button>
+            </div>
+            <Button onClick={() => setShowList(true)} className="w-8 h-15 bg-zinc-900/90 hover:bg-zinc-800 border border-white/20 rounded-3xl flex items-center justify-center">
+              <List className="w-7 h-7" />
+            </Button>
+          </div>
 
-
-      {/* Кнопки справа сверху */}
-      <div className="absolute top-30 right-6 z-[1100] flex flex-col gap-3">
-        <SettingsButton />
-        <Button
-          onClick={() => setShowNotifications(true)}
-          className="relative w-12 h-12 bg-zinc-900/90 hover:bg-zinc-800 border border-white/20 rounded-3xl flex items-center justify-center"
-        >
-          <Bell className="w-7 h-7" />
-          {notifications.length > 0 && (
-            <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold min-w-[18px] h-[18px] flex items-center justify-center rounded-full px-1">
-              {notifications.length > 9 ? '9+' : notifications.length}
-            </span>
-          )}
-        </Button>
-      </div>
+          {/* Кнопки справа сверху */}
+          <div className="absolute top-6 right-6 z-[1100] flex flex-col gap-3">
+            <SettingsButton />
+            <Button onClick={() => setShowNotifications(true)} className="relative w-12 h-12 bg-zinc-900/90 hover:bg-zinc-800 border border-white/20 rounded-3xl flex items-center justify-center">
+              <Bell className="w-7 h-7" />
+              {notifications.length > 0 && <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold min-w-[18px] h-[18px] flex items-center justify-center rounded-full px-1">{notifications.length > 9 ? '9+' : notifications.length}</span>}
+            </Button>
+            <Button onClick={signOut} variant="outline" size="sm" className="gap-2">
+              <LogOut className="w-4 h-4" /> Выход
+            </Button>
+          </div>
 
       {/* Диалог добавления устройства */}
       <Dialog open={showAdd} onOpenChange={setShowAdd}>
@@ -571,6 +532,8 @@ useEffect(() => {
           </div>
         </DialogContent>
       </Dialog>
+      </>
+)}
     </div>
   )
 }

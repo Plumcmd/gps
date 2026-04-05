@@ -35,6 +35,8 @@ async function loginWithDeviceCredentials(
   return token
 }
 
+
+
 // ====================== ДОБАВЛЕНИЕ УСТРОЙСТВА ======================
 export async function addDevice(imei: string, name: string, password: string) {
   const cleanImei = imei.trim()
@@ -45,11 +47,17 @@ export async function addDevice(imei: string, name: string, password: string) {
 
   const encryptedPassword = await encrypt(finalPassword)   // ← шифруем
 
+  const { data: { user }, error: authError } = await supabase.auth.getUser()
+  if (authError || !user) {
+    throw new Error('Пользователь не аутентифицирован')
+  }
+
   const { error } = await supabase.from('devices').upsert({
     imei: cleanImei,
     name: cleanName,
     encrypted_password: encryptedPassword,        // ← зашифрованный пароль
     base_url: 'https://www.whatsgps.com',
+    user_id: user.id,
   }, { onConflict: 'imei' })
 
   if (error) {
@@ -167,6 +175,8 @@ export async function fetchDevicePosition(imei: string) {
   }
 }
 
+
+
 // ====================== ИСТОРИЯ ТРЕКА ЗА СЕГОДНЯ ======================
 export async function fetchTodayHistory(imei: string) {
   try {
@@ -217,6 +227,8 @@ export async function fetchTodayHistory(imei: string) {
       throw new Error(msg || `API error ret=${json.ret}`)
     }
 
+    
+
     const points = (json.data || [])
       .map((p: any) => ({
         lat: parseFloat(p.lat || p.latitude || '0'),
@@ -234,3 +246,4 @@ export async function fetchTodayHistory(imei: string) {
     throw new Error(err.message || 'Не удалось загрузить историю трека')
   }
 }
+
