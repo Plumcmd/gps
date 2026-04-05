@@ -359,21 +359,76 @@ function getDeviceInfo(device: Device) {
       </div>
 
 
-      {/* Название проекта */}
-      <div
-        className="absolute left-4 top-1/2 -translate-y-1/2 z-[1000]"
-        onClick={handleDevClick}
-      >
-        <div className="gps-text cursor-pointer select-none text-cyan-200 font-semibold tracking-wider drop-shadow-[0_0_6px_rgba(0,255,255,0.7)] hover:drop-shadow-[0_0_12px_rgba(0,255,255,1)] transition-all duration-300">
-          <b>GPS Horizon</b>
-        </div>
+      <div className="fixed left-0 top-1/2 -translate-y-1/2 z-[1000] flex items-center group">
+  {/* ОСНОВНОЙ КОРПУС ЧЕЛКИ (БЕЗ СЛОЖНЫХ УГЛОВ) */}
+  <div 
+    className="
+      relative 
+      h-48 w-8 
+      bg-zinc-950 dark:bg-zinc-100 
+      rounded-r-2xl 
+      flex items-center justify-center 
+      transition-all duration-500 
+      hover:w-10
+      cursor-pointer
+      shadow-lg
+    "
+    onClick={handleDevClick}
+  >
+    
+    {/* ТЕКСТ */}
+    <div className="rotate-180 [writing-mode:vertical-lr]">
+      <span className="
+        font-black tracking-[0.25em] text-[10px] select-none
+        text-green-400 dark:text-green-600
+        drop-shadow-[0_0_8px_rgba(34,197,94,0.5)]
+        transition-all duration-300
+        group-hover:drop-shadow-[0_0_12px_rgba(34,197,94,0.9)]
+      ">
+        GPS HORIZON
+      </span>
+    </div>
 
-        {showDev && (
-          <div className="absolute left-8 top-7 px-4 py-2 rounded-lg text-sm font-bold text-green-300 bg-black/70 backdrop-blur-xl border border-green-400/40 shadow-[0_0_25px_rgba(0,255,100,0.7)] animate-cyberPopup pointer-events-none tracking-widest">
-            Developed by: <ul>Plum Studio</ul>
-          </div>
-        )}
+{showDev && (
+  <a
+    href="https://ТВОЯ_ССЫЛКА_ЗДЕСЬ.com" // <--- Вставь свою ссылку сюда
+    target="_blank"
+    rel="noopener noreferrer"
+    className="
+      absolute left-12 top-1/2 -translate-y-1/2
+      min-w-[130px] px-4 py-2 rounded-2xl
+      bg-zinc-950/95 dark:bg-white/95 backdrop-blur-md
+      border border-zinc-800/50 dark:border-zinc-200/50
+      shadow-2xl
+      animate-in fade-in zoom-in slide-in-from-left-4 duration-300
+      
+      /* Добавили интерактив */
+      pointer-events-auto cursor-pointer 
+      transition-transform active:scale-95
+      hover:bg-zinc-900 dark:hover:bg-zinc-50
+      no-underline
+    "
+  >
+    <div className="flex items-center gap-3">
+      {/* Индикатор статуса */}
+      <div className="relative flex h-2 w-2">
+        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+        <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
       </div>
+      
+      <div>
+        <div className="text-[10px] font-black tracking-widest text-white dark:text-zinc-950 uppercase leading-none">
+          VO Studio
+        </div>
+        <div className="text-[9px] font-medium text-zinc-500 dark:text-zinc-400 mt-1 tracking-tight">
+          Developer
+        </div>
+      </div>
+    </div>
+  </a>
+)}
+  </div>
+</div>
 
       {/* Модальное окно */}
       <Dialog open={!!selected} onOpenChange={() => setSelected(null)}>
