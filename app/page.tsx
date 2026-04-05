@@ -2,7 +2,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import dynamic from 'next/dynamic'
+import dynamic from 'next/dynamic';
 
 const TrackerMap = dynamic(() => import('@/components/Map'), { ssr: false })
 

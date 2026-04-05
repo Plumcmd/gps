@@ -29,7 +29,6 @@ import {
 import { Button } from '@/components/ui/button'
 
 // Фикс иконок Leaflet
-delete (L as any).Icon.Default.prototype._getIconUrl
 L.Icon.Default.mergeOptions({ iconRetinaUrl: '', iconUrl: '', shadowUrl: '' })
 
 const defaultCenter: [number, number] = [53.42894, 14.55302]
@@ -109,6 +108,18 @@ const TrackerMap = forwardRef<TrackerMapRef>((props, ref) => {
   }
 
   const [theme, setTheme] = useState<'dark' | 'light'>('dark')
+
+useEffect(() => {
+    // 2. Перенеси фикс иконок сюда
+    if (typeof window !== 'undefined') {
+      delete (L as any).Icon.Default.prototype._getIconUrl
+      L.Icon.Default.mergeOptions({
+        iconRetinaUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon-2x.png',
+        iconUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon.png',
+        shadowUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-shadow.png',
+      })
+    }
+  }, [])
 
   // ====================== ПЛАВНОЕ ДВИЖЕНИЕ МАРКЕРОВ ======================
   useEffect(() => {
