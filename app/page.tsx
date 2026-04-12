@@ -5,6 +5,7 @@ import { useState, useRef, useEffect } from 'react'
 import dynamic from 'next/dynamic';
 
 const TrackerMap = dynamic(() => import('@/components/Map'), { ssr: false })
+const AuthModal = dynamic(() => import('@/components/AuthModal'), { ssr: false })
 
 import { Button } from '@/components/ui/button'
 import {
@@ -23,7 +24,6 @@ import { Device } from "@/types/device"
 import { toast } from 'sonner'
 
 import SettingsButton from '@/components/SettingsButton'
-import AuthModal from '@/components/AuthModal'
 
 type Notification = {
   id: string
@@ -229,7 +229,7 @@ export default function Home() {
     <div className="min-h-screen bg-black text-white overflow-hidden relative pb-safe">
       {!user && <AuthModal />}
 
-      {!user && <div className="absolute inset-0 bg-black/90 z-[9998]" />}
+      
 
 {user && (
   <>

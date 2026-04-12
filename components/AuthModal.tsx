@@ -1,220 +1,293 @@
 'use client'
 
-import { useState, useEffect, useRef, forwardRef, useImperativeHandle } from 'react'
-import { MapContainer, TileLayer, Marker, Polyline } from 'react-leaflet'
-import L from 'leaflet'
-import 'leaflet/dist/leaflet.css'
-import { 
-  LocateFixed, 
-  Mail, 
-  KeyRound, 
-  Loader2, 
-  Target, 
-  Plus, 
-  LogIn, 
-  Battery 
-} from "lucide-react"
-import { motion, AnimatePresence } from 'framer-motion'
+import { useRef, useState, useEffect } from 'react'
+import dynamic from 'next/dynamic'
+import { Loader2, Target, Mail, KeyRound, Plus, LogIn } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Device } from "@/types/device"
 
-// Фикс иконок Leaflet
-if (typeof window !== 'undefined') {
-  delete (L as any).Icon.Default.prototype._getIconUrl
-  L.Icon.Default.mergeOptions({ iconRetinaUrl: '', iconUrl: '', shadowUrl: '' })
+const TrackerMap = dynamic(() => import('@/components/Map'), {
+  ssr: false,
+  loading: () => (
+    <div className="h-full w-full bg-black flex items-center justify-center">
+      <Loader2 className="w-8 h-8 animate-spin text-green-500" />
+    </div>
+  ),
+})
+
+const translations: any = {
+  ru: {
+    title: 'GPS HORIZON',
+    login: 'Вход в систему ',
+    register: 'Новый терминал',
+    email: 'Email',
+    password: 'Пароль',
+    submitLogin: 'Подключиться',
+    submitRegister: 'Создать аккаунт',
+    switchToRegister: 'Создать новый терминал',
+    switchToLogin: 'Уже есть доступ?',
+    error: 'Неверный email или пароль',
+    remember: 'Запомнить меня'
+  },
+  ua: {
+    title: 'GPS HORIZON',
+    login: 'Вхід у систему',
+    register: 'Новий термінал',
+    email: 'Email',
+    password: 'Пароль',
+    submitLogin: 'Підключитися',
+    submitRegister: 'Створити акаунт',
+    switchToRegister: 'Створити новий термінал',
+    switchToLogin: 'Вже є доступ?',
+    error: 'Невірний email або пароль',
+    remember: "Запам'ятати мене"
+  },
+  en: {
+    title: 'GPS HORIZON',
+    login: 'Sign In',
+    register: 'New Terminal',
+    email: 'Email',
+    password: 'Password',
+    submitLogin: 'Connect',
+    submitRegister: 'Create Account',
+    switchToRegister: 'Create new terminal',
+    switchToLogin: 'Already have access?',
+    error: 'Invalid email or password',
+    remember: 'Remember me'
+  },
+  pl: {
+    title: 'GPS HORIZON',
+    login: 'Logowanie',
+    register: 'Nowy terminal',
+    email: 'Email',
+    password: 'Hasło',
+    submitLogin: 'Połącz',
+    submitRegister: 'Utwórz konto',
+    switchToRegister: 'Utwórz nowy terminal',
+    switchToLogin: 'Masz już dostęp?',
+    error: 'Nieprawidłowy email lub hasło',
+    remember: 'Zapamiętaj mnie'
+  },
+  de: {
+    title: 'GPS HORIZON',
+    login: 'Anmelden',
+    register: 'Neues Terminal',
+    email: 'Email',
+    password: 'Passwort',
+    submitLogin: 'Verbinden',
+    submitRegister: 'Konto erstellen',
+    switchToRegister: 'Neues Terminal erstellen',
+    switchToLogin: 'Bereits Zugang?',
+    error: 'Ungültige E-Mail oder Passwort',
+    remember: 'Merken'
+  }
 }
 
-const defaultCenter: [number, number] = [53.42894, 14.55302]
-
-export default function TrackerWithAuth() {
-  const [session, setSession] = useState<any>(null)
-  const [loading, setLoading] = useState(true)
-
-  // Проверка сессии при загрузке
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session)
-      setLoading(false)
-    })
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session)
-    })
-
-    return () => subscription.unsubscribe()
-  }, [])
-
-  if (loading) return (
-    <div className="h-screen w-full bg-black flex items-center justify-center">
-      <Loader2 className="w-8 h-8 text-green-500 animate-spin" />
-    </div>
-  )
-
-  return (
-    <div className="h-screen w-full relative bg-black overflow-hidden">
-      {/* КАРТА ВСЕГДА ТУТ */}
-      <div className={`absolute inset-0 transition-all duration-1000 ${!session ? 'blur-lg scale-105 opacity-60' : 'blur-0 scale-100 opacity-100'}`}>
-        <TrackerMap />
-      </div>
-
-      {/* ФОРМА АВТОРИЗАЦИИ ПОВЕРХ КАРТЫ */}
-      <AnimatePresence>
-        {!session && (
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0, scale: 1.1 }}
-            className="absolute inset-0 z-[9999] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
-          >
-            <AuthForm />
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  )
-}
-
-// ====================== КОМПОНЕНТ ФОРМЫ ======================
-function AuthForm() {
+export default function AuthModal() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [isRegister, setIsRegister] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [remember, setRemember] = useState(true)
+  const [lang, setLang] = useState('ru')
 
-  const handleAuth = async () => {
-    if (!email || !password) return toast.error('Заполните все поля')
+  useEffect(() => {
+    const savedLang = localStorage.getItem('lang') || 'ru'
+    const savedEmail = localStorage.getItem('rememberEmail')
+    setLang(savedLang)
+    if (savedEmail) setEmail(savedEmail)
+  }, [])
+
+  const t = translations[lang]
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError('')
+
+    if (!email || !password) {
+      setError('Заполните все поля')
+      return
+    }
+
     setLoading(true)
     try {
       if (isRegister) {
         const { error } = await supabase.auth.signUp({ email, password })
         if (error) throw error
-        toast.success('Аккаунт создан')
+        toast.success('Аккаунт создан! Проверьте почту.')
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password })
         if (error) throw error
-        toast.success('Связь установлена')
+        toast.success('Вход выполнен')
+        if (remember) localStorage.setItem('rememberEmail', email)
       }
-    } catch (e: any) {
-      toast.error(e.message)
+    } catch (err: any) {
+      setError(t.error)
     } finally {
       setLoading(false)
     }
   }
 
+  const changeLang = (l: string) => {
+    setLang(l)
+    localStorage.setItem('lang', l)
+  }
+
   return (
-    <motion.div 
-      initial={{ y: 20 }}
-      animate={{ y: 0 }}
-      className="max-w-[800px] w-full grid grid-cols-1 md:grid-cols-[0.8fr,1.2fr] min-h-[500px] rounded-[32px] overflow-hidden shadow-[0_0_100px_rgba(0,0,0,0.8)]"
-    >
-      {/* ЛЕВАЯ ПАНЕЛЬ (DARK) */}
-      <div className="bg-zinc-950/90 backdrop-blur-md text-white p-8 flex flex-col justify-between border-r border-white/5">
-        <div>
-          <div className="flex items-center gap-2 mb-12">
-            <Target className="w-6 h-6 text-green-500 animate-pulse" />
-            <span className="text-xl font-black tracking-tighter italic">GPS<span className="text-zinc-600">HORIZON</span></span>
-          </div>
-          <h1 className="text-4xl font-black leading-none uppercase italic">
-            {isRegister ? 'Новый\nТерминал' : 'Вход в\nСистему'}
-          </h1>
-          <div className="h-1 w-12 bg-green-500 mt-4" />
-        </div>
-        <div className="font-mono text-[10px] text-zinc-500 space-y-1 uppercase">
-          <p className="flex justify-between"><span>Статус:</span> <span className="text-green-500">Ожидание</span></p>
-          <p className="flex justify-between"><span>Шифрование:</span> <span>AES-256</span></p>
-        </div>
+    <div className="h-screen w-full relative bg-black overflow-hidden">
+      
+      {/* Фоновая карта с мощным блюром */}
+      <div className="absolute inset-0 scale-110 blur-[8px] opacity-75">
+        <TrackerMap />
       </div>
 
-      {/* ПРАВАЯ ПАНЕЛЬ (LIGHT) */}
-      <div className="bg-white/95 backdrop-blur-md p-10 md:p-12 flex flex-col justify-center">
-        <div className="w-full max-w-sm mx-auto space-y-6">
-          <div className="mb-4">
-            <h2 className="text-2xl font-black text-black uppercase">{isRegister ? 'Регистрация' : 'Авторизация'}</h2>
-            <p className="text-zinc-400 text-[10px] font-bold uppercase tracking-widest mt-1">SATELLITE ACCESS PROTOCOL</p>
-          </div>
+      {/* Основной контент */}
+      <div className="absolute inset-0 bg-gradient-to-br from-black/80 via-black/70 to-black/90 backdrop-blur-2xl flex items-center justify-center p-4">
 
-          <div className="space-y-3">
-            <div className="relative group">
-              <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400 group-focus-within:text-black z-10" />
-              <Input
-                placeholder="Email терминала"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="h-14 pl-12 bg-zinc-100 border-none rounded-2xl text-black font-bold focus:ring-2 focus:ring-black/5"
-              />
+        <div className="w-full max-w-[380px] md:max-w-[820px] grid grid-cols-1 md:grid-cols-[1fr,1.15fr] rounded-3xl overflow-hidden border border-white/10 bg-white/5 backdrop-blur-3xl shadow-2xl">
+
+          {/* Левая панель (только на больших экранах) */}
+          <div className="hidden md:flex flex-col justify-between p-8 lg:p-10 bg-gradient-to-b from-zinc-900/90 to-black/90 text-white border-r border-white/10">
+            <div>
+              <div className="flex items-center gap-3 mb-12">
+                <div className="p-3 rounded-2xl bg-green-500/10 border border-green-500/30">
+                  <Target className="w-8 h-8 text-green-400" />
+                </div>
+                <span className="text-3xl font-black tracking-tighter">GPS HORIZON</span>
+              </div>
+              <h1 className="text-5xl font-black leading-none tracking-tighter">
+                {isRegister ? t.register : t.login}
+              </h1>
+              <p className="mt-6 text-zinc-400 text-lg">
+                Спутниковое слежение<br />в реальном времени
+              </p>
             </div>
-            <div className="relative group">
-              <KeyRound className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400 group-focus-within:text-black z-10" />
-              <Input
-                type="password"
-                placeholder="Код доступа"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="h-14 pl-12 bg-zinc-100 border-none rounded-2xl text-black font-bold focus:ring-2 focus:ring-black/5"
-              />
+
+            <div className="text-xs font-mono uppercase tracking-widest text-green-400/80">
+              AES-256 • Реал-тайм • Защищено
             </div>
           </div>
 
-          <div className="space-y-4 pt-2">
-            <Button
-              onClick={handleAuth}
-              disabled={loading}
-              className="w-full h-14 bg-black text-white rounded-2xl font-bold tracking-widest hover:bg-zinc-800 shadow-xl transition-all flex gap-2"
-            >
-              {loading ? <Loader2 className="animate-spin" /> : (
-                <>
-                  {isRegister ? <Plus size={18} /> : <LogIn size={18} />}
-                  <span className="mt-0.5 uppercase">{isRegister ? 'Создать' : 'Установить связь'}</span>
-                </>
-              )}
-            </Button>
-            <button
-              onClick={() => setIsRegister(!isRegister)}
-              className="w-full text-[10px] font-black uppercase tracking-[0.2em] text-zinc-400 hover:text-black transition-colors"
-            >
-              {isRegister ? 'Уже есть доступ?' : 'Запросить новый терминал'}
-            </button>
+          {/* Правая панель — форма */}
+          <div className="p-6 sm:p-8 md:p-10 bg-white/95 flex flex-col">
+
+<div className="flex justify-center mb-6">
+  <div className="flex items-center gap-1 p-1 rounded-2xl bg-white/70 backdrop-blur border border-zinc-200 shadow-sm">
+    
+    {[
+      { code: 'ru', label: 'RU', flag: '🇷🇺' },
+      { code: 'ua', label: 'UA', flag: '🇺🇦' },
+      { code: 'en', label: 'EN', flag: '🇬🇧' },
+      { code: 'pl', label: 'PL', flag: '🇵🇱' },
+      { code: 'de', label: 'DE', flag: '🇩🇪' }
+    ].map(({ code, label, flag }) => (
+      <button
+        key={code}
+        onClick={() => changeLang(code)}
+        className={`
+          relative flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold
+          transition-all duration-200
+          ${lang === code 
+            ? 'bg-black text-white shadow-md scale-105' 
+            : 'text-zinc-600 hover:text-black hover:bg-white'
+          }
+        `}
+      >
+        <span className="text-sm">{flag}</span>
+        <span>{label}</span>
+
+        {/* активный индикатор */}
+        {lang === code && (
+          <span className="absolute inset-0 rounded-xl ring-2 ring-black/10" />
+        )}
+      </button>
+    ))}
+
+  </div>
+</div>
+
+            <form onSubmit={handleSubmit} className="flex-1 flex flex-col space-y-5">
+
+              <div className="text-center md:text-left">
+                <h2 className="text-3xl font-black text-black">
+                  {isRegister ? t.register : t.login}
+                </h2>
+              </div>
+
+              {/* Email */}
+              <div className="relative">
+                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-400" />
+                <Input
+                  type="email"
+                  autoComplete="email"
+                  placeholder={t.email}
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="h-14 pl-12 rounded-2xl bg-white border border-zinc-200 text-black placeholder:text-zinc-400 focus:border-green-500 focus:ring-4 focus:ring-green-500/10"
+                  required
+                />
+              </div>
+
+              {/* Password */}
+              <div className="relative">
+                <KeyRound className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-400" />
+                <Input
+                  type="password"
+                  autoComplete={isRegister ? 'new-password' : 'current-password'}
+                  placeholder={t.password}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="h-14 pl-12 rounded-2xl bg-white border border-zinc-200 text-black placeholder:text-zinc-400 focus:border-green-500 focus:ring-4 focus:ring-green-500/10"
+                  required
+                />
+              </div>
+
+              {error && <div className="text-red-500 text-sm text-center">{error}</div>}
+
+              {/* Remember me */}
+              <label className="flex items-center gap-2 text-sm text-zinc-600 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={remember}
+                  onChange={(e) => setRemember(e.target.checked)}
+                  className="w-4 h-4 accent-green-500"
+                />
+                {t.remember}
+              </label>
+
+              {/* Кнопка */}
+              <Button
+                type="submit"
+                disabled={loading}
+                className="w-full h-14 rounded-2xl bg-black hover:bg-zinc-900 text-white font-semibold text-lg shadow-xl transition-all active:scale-95"
+              >
+                {loading ? (
+                  <Loader2 className="animate-spin w-6 h-6" />
+                ) : (
+                  <>
+                    {isRegister ? <Plus size={22} /> : <LogIn size={22} />}
+                    <span className="ml-3">
+                      {isRegister ? t.submitRegister : t.submitLogin}
+                    </span>
+                  </>
+                )}
+              </Button>
+
+              {/* Переключение режимов */}
+              <button
+                type="button"
+                onClick={() => setIsRegister(!isRegister)}
+                className="text-sm text-zinc-500 hover:text-black font-medium transition-colors"
+              >
+                {isRegister ? t.switchToLogin : t.switchToRegister}
+              </button>
+            </form>
           </div>
         </div>
       </div>
-    </motion.div>
-  )
-}
-
-// ====================== КОМПОНЕНТ КАРТЫ ======================
-const TrackerMap = () => {
-  const [devices, setDevices] = useState<Device[]>([])
-  const [theme, setTheme] = useState<'dark' | 'light'>('dark')
-  const mapRef = useRef<L.Map | null>(null)
-
-  useEffect(() => {
-    const load = async () => {
-      const { data } = await supabase.from('devices').select('*')
-      setDevices(data || [])
-    }
-    load()
-    const sub = supabase.channel('map-live').on('postgres_changes', { event: '*', schema: 'public', table: 'devices' }, load).subscribe()
-    return () => { supabase.removeChannel(sub) }
-  }, [])
-
-  return (
-    <MapContainer
-      center={defaultCenter}
-      zoom={12}
-      className="h-full w-full"
-      zoomControl={false}
-      attributionControl={false}
-      ref={mapRef}
-    >
-      <TileLayer
-        url={theme === 'dark' 
-          ? "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-          : "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"}
-      />
-      {/* Рендер маркеров аналогично твоему коду... */}
-    </MapContainer>
+    </div>
   )
 }
