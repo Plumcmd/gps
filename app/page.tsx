@@ -264,14 +264,11 @@ export default function Home() {
           </div>
 
           {/* Кнопки справа сверху */}
-          <div className="absolute top-6 right-6 z-[1100] flex flex-col gap-3">
+          <div className="absolute top-15 right-6 z-[1100] flex flex-col gap-3">
             <SettingsButton />
             <Button onClick={() => setShowNotifications(true)} className="relative w-12 h-12 bg-zinc-900/90 hover:bg-zinc-800 border border-white/20 rounded-3xl flex items-center justify-center">
               <Bell className="w-7 h-7" />
               {notifications.length > 0 && <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold min-w-[18px] h-[18px] flex items-center justify-center rounded-full px-1">{notifications.length > 9 ? '9+' : notifications.length}</span>}
-            </Button>
-            <Button onClick={signOut} variant="outline" size="sm" className="gap-2">
-              <LogOut className="w-4 h-4" /> Выход
             </Button>
           </div>
 
