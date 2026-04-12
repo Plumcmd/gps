@@ -93,7 +93,7 @@ export default function Home() {
     return () => listener.subscription.unsubscribe()
   }, [])
 
-  const signOut = async () => await supabase.auth.signOut()
+
 
   // ====================== DATA ======================
   const getAddress = async (lat: number, lng: number): Promise<string> => {
@@ -264,7 +264,7 @@ export default function Home() {
           </div>
 
           {/* Кнопки справа сверху */}
-          <div className="absolute top-15 right-6 z-[1100] flex flex-col gap-3">
+          <div className="absolute top-20 right-6 z-[1100] flex flex-col gap-3">
             <SettingsButton />
             <Button onClick={() => setShowNotifications(true)} className="relative w-12 h-12 bg-zinc-900/90 hover:bg-zinc-800 border border-white/20 rounded-3xl flex items-center justify-center">
               <Bell className="w-7 h-7" />
